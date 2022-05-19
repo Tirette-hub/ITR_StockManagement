@@ -1,7 +1,7 @@
 # HOW TO RUN
-	´´´
-	gcc projet.c -lm -pthread -o projet && ./projet
-	´´´
+```
+gcc projet.c -lm -pthread -o projet && ./projet
+```
 *do not try now, not tested yet, just read the code*
 
 # WHAT DOES IT CONTAINS
