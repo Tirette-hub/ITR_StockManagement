@@ -13,7 +13,8 @@
 
 #include <signal.h>
 
-#define SEM_SHARED
+#define SEM_PRIVATE 0
+
 
 #define SHM_RDWR 0
 
@@ -56,18 +57,42 @@ int shmid;
 volatile sig_atomic_t status = __START__;
 unsigned int* segment;
 sigset_t mask;
-
-int product_number = 4;
+sem_t* semaphore;
+int product_number = 4, client_number = 2, count = 0;
 struct Product products[product_number];
-struct Productor productors[product_number]
-struct Client clients[2];
+clock_t begin;
 
 int main(int argc, char* argv[]){
 	sigfillset(&mask);
 	other_pid = getpid();
 
 	//create products
+	struct Product pomme = {
+		0;
+		1;
+		"An apple every day keeps doctors away";
+	}
+	struct Product poire = {
+		1;
+		1;
+		"La bonne poire";
+	}
+	struct Product bois = {
+		2;
+		3;
+		"Un tronc tout frais";
+	}
+	struct Product brique = {
+		3;
+		2;
+		"Utilisé dans la construction de maisons";
+	}
+	products[0] = pomme;
+	products[1] = poire;
+	products[2] = bois;
+	products[3] = brique;
 
+	begin = clock();
 	pid_t fvalue = fork();
 
 	if (fvalue != 0){
@@ -77,19 +102,34 @@ int main(int argc, char* argv[]){
 		fvalue = fork();
 		if (fvalue != fvalue){
 			//producteurs
+			srand(time(NULL));
+			sem_init(semaphore, SEM_PRIVATE, 0);
+			//create threads
+
+			sem_destroy(semaphore);
 		}else{
+			srand(time(NULL));
 			//clients
+			sem_init(semaphore, SEM_PRIVATE, product_number + 10);
+			//create threads
+
+			sem_destroy(semaphore);
 		}
 	}
 	return EXIT_SUCCESS;
 }
 
 void* ProductorBehavior(void* unused){
-
+	sem_wait(semaphore);
+	struct Productor self = {
+		count++;
+		; //every second
+	}
+	sem_post(semaphore);
 }
 
 void ManagerBehavior(){
-
+	srand(time(NULL));
 }
 
 void* ClientBehavior(void* unused){
