@@ -50,6 +50,9 @@ void* ClientBehavior(void*);
 //handlers
 void handleQuit(int signum);
 
+//getters
+int getDeltaMili();
+
 
 //global variables
 pid_t other_pid;
@@ -142,4 +145,10 @@ void handleQuit(int signum){
 
 	shmdt(segment);
 	exit(EXIT_SUCCESS);
+}
+
+int getDeltaMili(){
+	clock_t now = clock();
+	int delta = (end - begin) * 1000 /CLOCKS_PER_SEC;
+	return delta;
 }
