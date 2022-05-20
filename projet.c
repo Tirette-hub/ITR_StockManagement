@@ -15,7 +15,6 @@
 
 #define SEM_PRIVATE 0
 
-
 #define SHM_RDWR 0
 
 #define __START__ 0
@@ -23,19 +22,23 @@
 #define OPERATING 2
 #define __FINAL__ 3
 
+#define DAY_DURATION 16
+#define NIGHT_DURATION 8
+//one day is represented by 24 unit of time
+
 //RT signals
 
 //data structures
-struct Product{
+typedef struct Product{
 	int id,
 	volume;
 	char descr[256];
 };
-struct Productor{
+typedef struct Productor{
 	int product_id;
 	double production_time;
 };
-struct Client{
+typedef struct Client{
 	int id,
 	min_time,
 	max_time,
@@ -62,7 +65,9 @@ unsigned int* segment;
 sigset_t mask;
 sem_t* semaphore;
 int product_number = 4, client_number = 2, count = 0;
-struct Product products[product_number];
+Product products[product_number];
+Productor productors[product_number];
+Client clients[client_number];
 clock_t begin;
 
 int main(int argc, char* argv[]){
@@ -70,22 +75,22 @@ int main(int argc, char* argv[]){
 	other_pid = getpid();
 
 	//create products
-	struct Product pomme = {
+	Product pomme = {
 		0;
 		1;
 		"An apple every day keeps doctors away";
 	}
-	struct Product poire = {
+	Product poire = {
 		1;
 		1;
 		"La bonne poire";
 	}
-	struct Product bois = {
+	Product bois = {
 		2;
 		3;
 		"Un tronc tout frais";
 	}
-	struct Product brique = {
+	Product brique = {
 		3;
 		2;
 		"Utilisé dans la construction de maisons";
@@ -94,6 +99,42 @@ int main(int argc, char* argv[]){
 	products[1] = poire;
 	products[2] = bois;
 	products[3] = brique;
+
+	//create productors
+	Productor pommiers = {
+		0;
+		1;
+	}
+	Productor poiriers = {
+		1;
+		1.5;
+	}
+	Productor foret = {
+		2;
+		5;
+	}
+	Productor carriere = {
+		3;
+		3;
+	}
+	productors[0] = pommiers;
+	productors[1] = poiriers;
+	productors[2] = foret;
+	productors[3] = carriere;
+
+	//create clients
+	Client maraicher = {
+		0;
+		2;
+		10;
+		{2, pomme, 2, poire, 3};
+	}
+	Client macon = {
+		1;
+		5;
+		15;
+		{2, bois, 1, brique, 5};
+	}
 
 	begin = clock();
 	pid_t fvalue = fork();
