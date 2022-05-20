@@ -1,6 +1,6 @@
 # ARCHITECTURE
 ![project architecture](/schema_archi_projet.jpg)
-_The **SIGRT** arrow from **SM** and **P** is not in use anymore_  
+_The **SIGRT** arrow from **SM** to **P** is not in use anymore_  
 
 # HOW TO RUN
 ```
