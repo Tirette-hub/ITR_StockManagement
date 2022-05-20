@@ -1,3 +1,6 @@
+# ARCHITECTURE
+![project architecture](/schema_archi_projet.jpg)
+
 # HOW TO RUN
 ```
 gcc projet.c -lm -pthread -o projet && ./projet
