@@ -7,10 +7,12 @@
 
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/stat.h>
 
 #include <semaphore.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <mqueue.h>
 
 #include <signal.h>
 
@@ -85,23 +87,23 @@ int quit = 0, count = 0;
 sem_t* semaphore;
 int product_size = sizeof(Product), productor_size = sizeof(Productor), client_size = sizeof(Client);
 
-//global variables only used by stock manager process
-int shmid_tab[product_number];
-int order_queue[client_number];
-
 volatile sig_atomic_t status;
 sigset_t mask;
 
 Product products[product_number];
 Productor productors[product_number];
 Client clients[client_number];
-int *stocks[product_number];
-int stocks_parameters[2*product_number]; //4 first int: max size of each stock, 4 last int: current filling level
 clock_t begin;
+
+//global variables only used by stock manager process
+int shmid_tab[product_number];
+int *segment_tab[2*product_number]; //4first int: product id, 4 last int: serial number (for every productor)
+int *stocks[product_number];
+int stocks_parameters[2*product_number]; //4 first int: max size of each stock, 4 last int: current filling level (for every stock of each type)
+int order_queue[client_number];
 
 int main(int argc, char* argv[]){
 	signal(SIGINT, handleQuit);
-	sigfillset(&mask);
 	other_pid = getpid();
 
 	createDataSet();
@@ -129,6 +131,7 @@ int main(int argc, char* argv[]){
 			sem_destroy(semaphore);
 		}else{
 			srand(time(NULL));
+			sigfillset(&mask);
 			//clients
 			sem_init(semaphore, SEM_PRIVATE, product_number + 10);
 			//create threads
@@ -189,6 +192,7 @@ void* ProductorBehavior(void* unused){
 		perror ("shmctl");
 
 	shmdt(local_stock);
+	shmdt(serial_id);
 
 	pthread_exit(&thread_retval);
 }
@@ -231,12 +235,24 @@ void ManagerBehavior(){
 	}
 
 	//creating shm
-	for (int i = 0; i < product_number; i++)
+	for (int i = 0; i < product_number; i++){
 		shmid_tab[i] = shmget(ftok("projet.c", i), 2*sizeof(int), IPC_CREAT | 0600); //get the shm id
+		segment_tab[i] = shmat(shmid_tab[i], NULL, 0);
+		segment_tab[i+product_number] = segment_tab[i]+1;
+	}
 
 	//create message queues to communicate with clients
+	char* mq_name;
+	for (int i = 0; i < client_number; i++){
+		do{
+			sprintf(mq_name, "/c%i-queue", i);
+			message_queues[i] = mq_open(mq_name, O_WRONLY);
+		}while(message_queues[i] == -1);
+	}
 
 	//expect signals from Productors or Clients
+	mqd_t message_queues[client_number];
+
 	struct sigaction descriptor;
 	descriptor.sa_flags=SA_SIGINFO;
 	descriptor.sa_sigaction = handleProductor;
@@ -246,13 +262,23 @@ void ManagerBehavior(){
 
 	//principle loop
 	while(!quit){
-
+		if (isDayTime()){
+			for (int i = 0; i < count; i++){ //count is used here to count the number of orders
+				//check if the order can be honored
+			}
+		}
 	}
 
 	//free shm
 	for (int i = 0; i < product_number; i++){
 		shmctl(shmid, IPC_RMID, NULL);
+		shmdt(segment_tab[i]);
+		shmdt(segment_tab[i+product_number]);
 	}
+
+	//close message queues
+	for(int i = 0; i < client_number; i++)
+		mq_close(message_queues[i]);
 }
 
 void* ClientBehavior(void* unused){
