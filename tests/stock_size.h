@@ -74,8 +74,9 @@ int *createStocks(int max_stock_volume, int stock_sizes[]){
 		int stock_base = (int)(rebasement - fmod(rebasement, product_volume));
 		//printf("\tstock base = %i,\n", stock_base);
 		int stock_size = stock_base + roundStock(rebasement, product_volume);
+		checker = checker + stock_size; // important to place this before to devide the stock size by its product volume to be sure the stock size is really filled
+		stock_size = stock_size/product_volume;
 		//printf("\tstock size = %i\n\n", stock_size);
-		checker = checker + stock_size;
 
 		stock_sizes[i] = stock_size;
 	}

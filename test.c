@@ -23,7 +23,7 @@ int main(int argc, char* argv[]){
 	bool isOk = true;
 
 	if (isOk){
-		int expected_tab[5] = {34, 23, 21, 22, 100};
+		int expected_tab[5] = {34, 23, 7, 11, 100};
 		int result_tab[5];
 		createStocks(100, result_tab);
 		for (int i = 0; i < 5; i++){
@@ -39,7 +39,7 @@ int main(int argc, char* argv[]){
 	if (!isOk){
 		switch(count){
 			case 0:
-			printf("failed testing createStocks function.");
+			printf("failed testing createStocks function.\n");
 			break;
 		}
 		return EXIT_FAILURE;
