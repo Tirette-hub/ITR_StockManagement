@@ -76,6 +76,7 @@ void handleOrder(int, siginfo_t*, void*);
 int getDeltaMili();
 bool isDayTime();
 int roundStock(double, int);
+char* format(char*, int);
 
 //setters
 void createDataSet();
@@ -91,7 +92,7 @@ volatile sig_atomic_t status;
 sigset_t mask;
 
 Product products[product_number];
-Productor productors[product_number];
+Productor productors[product_number]; //as many productors as products
 Client clients[client_number];
 clock_t begin;
 
@@ -226,8 +227,9 @@ void ManagerBehavior(){
 		int product_volume = products[productors[i].product_id].volume;
 		double rebasement = DAY_DURATION*product_volume*UT*max_stock_volume/(1000.0*devider*productors[i].production_time); //change "percentage base" of day production
 		int stock_base = (int)(rebasement - fmod(rebasement, product_volume));
-		int stock_size = stock_base + roundStock(rebasement, product_volume);
+		int stock_size = stock_base + roundStock(rebasement, product_volume); //true stock size
 		//checker = checker + stock_size;
+		stock_size = stock_size/product_volume; //stock size relative to its product volume //allows to restrict the size to the number of products it can contain
 		int stock[stock_size/product_volume];
 		stocks_parameters[i] = stock_size;
 		stocks_parameters[i+product_number] = 0;
@@ -242,11 +244,11 @@ void ManagerBehavior(){
 	}
 
 	//create message queues to communicate with clients
-	char* mq_name;
+	char* s;
 	for (int i = 0; i < client_number; i++){
 		do{
-			sprintf(mq_name, "/c%i-queue", i);
-			message_queues[i] = mq_open(mq_name, O_WRONLY);
+			sprintf(s, "/c%i-queue", i);
+			message_queues[i] = mq_open(s, O_WRONLY);
 		}while(message_queues[i] == -1);
 	}
 
@@ -265,6 +267,28 @@ void ManagerBehavior(){
 		if (isDayTime()){
 			for (int i = 0; i < count; i++){ //count is used here to count the number of orders
 				//check if the order can be honored
+				int j = 0;
+				int client_id = order_queue[i];
+				int product_list[] = clients[client_id].request;
+				int number_of_products = product_list[j++];
+				bool deliverable = true;
+				for (int i = 0; i < number_of_products && deliverable; i++)
+					if (stocks_parameters[product_number+product_list[1+i].id] < product_list[i+2])
+						deliverable = false;
+
+				//empty stocks
+				for (int i = 0; i < number_of_products; i++){
+					int number_to_send = number_of_products[i+2];
+					for (int j = 0; j < number_to_send; j++)
+						stocks_parameters[product_number+product_list[1+i].id]--;
+				}
+				//by changing only the id pointing to the "empty" stock case, filling again this case will overwrite the previous serial number
+
+				if (deliverable){
+					int status = mq_send(message_queues[client_id], s, strlen(s), 0);
+					if (status == -1)
+						printf("Error trying to send message via queue: %s to client n_%i\n", s, client_id);
+				}
 			}
 		}
 	}
@@ -304,6 +328,24 @@ void handleQuit(int signum){
 		quit = 1;
 }
 
+void handleFullProductorStock(int signum, siginfo_t* info, void* context){
+	int productor_id = info.si_value.sival_int;
+
+	//int *product_id = segment_tab[productor_id];
+	int *serial_number = segment_tab[productor_id+product_number];
+
+	if (stocks_parameters[productor_id + product_number] < stocks_parameters[productor_id]){
+		stocks[productor_id][stocks_parameters[productor_id + product_number]] = *serial_number;
+		stocks_parameters[productor_id + product_number]++;
+		*serial_number = -1;
+	}
+}
+
+void handleOrder(int signum, siginfo_t* info, void* context){
+	int client_id = info.si_value.sival_int;
+	order_queue[count++] = client_id;
+}
+
 
 //getters
 
@@ -329,6 +371,17 @@ int roundStock(double base, int product_volume){
 	if (rest <= product_volume / 2.0)
 		return 0;
 	return product_volume;
+}
+
+char* format(char* s, int value){
+	char* retval;
+	if (s == NULL){
+		sprintf(retval, "%i", value);
+	}else{
+		sprintf(retval, "%s %i", s, value);
+	}
+
+	return retval;
 }
 
 
@@ -384,17 +437,23 @@ void createDataSet(){
 	productors[3] = quarry;
 
 	//create clients
+	int order[5] = {2, apple, 2, pear, 3};
 	Client market = {
 		0,
 		2,
 		10,
-		{2, apple, 2, pear, 3}
+		order
 	};
+	order[0] = 2;
+	order[1] = wood;
+	order[2] = 1;
+	order[3] = brick;
+	order[4] = 5;
 	Client mason = {
 		1,
 		5,
 		15,
-		{2, wood, 1, brick, 5}
+		order
 	};
 	clients[0] = market;
 	clients[1] = mason;
