@@ -115,7 +115,7 @@ int main(int argc, char* argv[]){
 		//gestionnaire
 	}else{
 		fvalue = fork();
-		if (fvalue != fvalue){
+		if (fvalue != 0){
 			//producteurs
 			pthread_t threads_list[product_number];
 			//srand(time(NULL));
