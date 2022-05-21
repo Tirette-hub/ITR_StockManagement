@@ -284,7 +284,60 @@ void ManagerBehavior(){
 void* ClientBehavior(void* unused){
 	int thread_retval = EXIT_SUCCESS;
 
+	srand(time(NULL) ^ (getpid() << 16));
 
+	int min_time = self.min_time;
+	int max_time = self.max_time;
+
+	int id = self.id;
+
+	int priority = 0;
+	const char buffer[1024];
+
+	status = EXPECTING
+
+	while(!quit){
+
+		//Wait before send request
+		int wait_time = (rand() % (max_time - min_time)) + min_time;
+		sleep(wait_time);
+
+		//Fill the envelope with id?
+
+		//Send request
+		//Send signal to stock with the request
+		sigqueue(other_pid, SIGRTR, envelope);
+
+		//Mask?
+		sigdelset(&mask, EXPECTING);
+		sigprocmask(SIG_SETMASK, &mask, NULL);
+
+		// Wait for a sig
+		while(status == EXPECTING){
+			pause();
+		}
+		
+		//Open message queue
+
+		sprintf(mq_name, "/c%i-queue", id);
+		mdq_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
+		if(queue == -1){
+			perror("mq_open");
+			return EXIT_FAILURE;
+		}
+
+		
+		size_t amount = mq_receive(queue, buffer, 1024, &priority);
+		if(amount == -1)
+			perror("mq_receive");
+
+		mq_close(queue);
+		mq_unlink("")
+
+		//Receive signals from stock
+
+
+	}
 
 	pthread_exit(&thread_retval);
 }
