@@ -34,11 +34,9 @@
 #define UT 2000 //1Unit of Time = 2000ms => 1sec = .5 UT
 //one day is represented by 24 unit of time
 
-#define true 1
-#define false 0;
 #define product_number 4
 #define client_number 2
-typedef bool int;
+typedef enum{false, true} bool;
 
 //RT signals
 #define SIGRTF (SIGRTMIN + 0) //SIGnal Real Time "Full"		//from productor to stock manager
@@ -213,7 +211,7 @@ void ManagerBehavior(){
 
 	//some math stuff while creating optimized stocks to do as described just befores
 	int devider = 0;
-	int checker = 0; //debug variable
+	//int checker = 0; //debug variable
 	for (int i = 0; i < product_number; i++){
 		//get production for a day:
 		double day_production = DAY_DURATION*products[productors[i].product_id].volume*UT/(1000.0*productors[i].production_time);
@@ -225,7 +223,7 @@ void ManagerBehavior(){
 		double rebasement = DAY_DURATION*product_volume*UT*max_stock_volume/(1000.0*devider*productors[i].production_time); //change "percentage base" of day production
 		int stock_base = (int)(rebasement - fmod(rebasement, product_volume));
 		int stock_size = stock_base + roundStock(rebasement, product_volume);
-		checker = checker + stock_size;
+		//checker = checker + stock_size;
 		int stock[stock_size/product_volume];
 		stocks_parameters[i] = stock_size;
 		stocks_parameters[i+product_number] = 0;
