@@ -8,6 +8,12 @@ gcc projet.c -lm -pthread -o projet && ./projet
 ```
 *do not try now, not tested yet, just read the code*
 
+# HOW TO TEST
+```
+gcc test.c -lm -o test && ./test
+```
+Tests creation of stocks and their size for *Stock Manager* process
+
 # WHAT DOES IT CONTAINS
 ## DATA STRUCTURES
 ### 1. PRODUCT
