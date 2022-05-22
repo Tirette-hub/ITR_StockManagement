@@ -83,7 +83,7 @@ void createDataSet();
 
 //global variables
 pid_t other_pid;
-int quit = 0, count = 0, countClients = 0;
+int quit = 0, count = 0;
 sem_t* semaphore;
 int product_size = sizeof(Product), productor_size = sizeof(Productor), client_size = sizeof(Client);
 
@@ -287,7 +287,9 @@ void ManagerBehavior(){
 void* ClientBehavior(void* unused){
 	int thread_retval = EXIT_SUCCESS;
 
-	Client self = clients[countClients++];
+	sem_wait(semaphore);
+	Client self = clients[count++];
+	sem_psot(semaphore);
 
 	int min_time = self.min_time;
 	int max_time = self.max_time;
@@ -303,17 +305,15 @@ void* ClientBehavior(void* unused){
 
 	char* mq_name;
 
+	//Open message queue
+	sprintf(mq_name, "/c%i-queue", id);
+	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
+	if(queue == -1){
+		perror("mq_open");
+		return EXIT_FAILURE;
+	}
+
 	while(!quit){
-
-		//Open message queue
-		sprintf(mq_name, "/c%i-queue", id);
-		mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
-		if(queue == -1){
-			perror("mq_open");
-			return EXIT_FAILURE;
-		}
-
-
 		//Wait before send request
 		int wait_time = (rand() % (max_time - min_time)) + min_time;
 		sleep(wait_time);
@@ -332,10 +332,12 @@ void* ClientBehavior(void* unused){
 			amount = mq_receive(queue, buffer, 1024, &priority);
 		}while(amount == -1);
 
-		mq_close(queue);
-		mq_unlink("");
+		printf("[%d] received order: %s");
 
 	}
+
+	mq_close(queue);
+	mq_unlink(mq_name);
 
 	pthread_exit(&thread_retval);
 }
