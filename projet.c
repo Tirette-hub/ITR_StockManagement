@@ -486,7 +486,7 @@ void createDataSet(){
 	productors[3] = quarry;
 
 	//create clients
-	int order[5] = {2, apple, 2, pear, 3};
+	int order[5] = {2, apple.id, 2, pear.id, 3};
 	Client market = {
 		0,
 		2,
@@ -494,9 +494,9 @@ void createDataSet(){
 		order
 	};
 	order[0] = 2;
-	order[1] = wood;
+	order[1] = wood.id;
 	order[2] = 1;
-	order[3] = brick;
+	order[3] = brick.id;
 	order[4] = 5;
 	Client mason = {
 		1,
