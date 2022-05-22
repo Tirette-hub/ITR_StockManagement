@@ -247,6 +247,8 @@ void ManagerBehavior(){
 	}
 
 	//create message queues to communicate with clients
+	mqd_t message_queues[client_number];
+
 	char* s;
 	for (int i = 0; i < client_number; i++){
 		do{
@@ -256,8 +258,6 @@ void ManagerBehavior(){
 	}
 
 	//expect signals from Productors or Clients
-	mqd_t message_queues[client_number];
-
 	struct sigaction descriptor;
 	descriptor.sa_flags=SA_SIGINFO;
 	descriptor.sa_sigaction = handleProductor;
