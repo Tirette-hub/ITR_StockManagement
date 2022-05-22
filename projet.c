@@ -260,9 +260,9 @@ void ManagerBehavior(){
 	//expect signals from Productors or Clients
 	struct sigaction descriptor;
 	descriptor.sa_flags=SA_SIGINFO;
-	descriptor.sa_sigaction = handleProductor;
+	descriptor.sa_sigaction = handleFullProductorStock;
 	sigaction(SIGRTF, &descriptor, NULL);
-	descriptor.sa_sigaction = handleClient;
+	descriptor.sa_sigaction = handleOrder;
 	sigaction(SIGRTR, &descriptor, NULL);
 
 	//principle loop
@@ -272,18 +272,18 @@ void ManagerBehavior(){
 				//check if the order can be honored
 				int j = 0;
 				int client_id = order_queue[i];
-				int product_list[] = clients[client_id].request;
+				int *product_list = clients[client_id].request;
 				int number_of_products = product_list[j++];
 				bool deliverable = true;
 				for (int i = 0; i < number_of_products && deliverable; i++)
-					if (stocks_parameters[product_number+product_list[1+i].id] < product_list[i+2])
+					if (stocks_parameters[product_number+product_list[1+i]] < product_list[i+2])
 						deliverable = false;
 
 				//empty stocks
 				for (int i = 0; i < number_of_products; i++){
-					int number_to_send = number_of_products[i+2];
+					int number_to_send = product_list[i+2];
 					for (int j = 0; j < number_to_send; j++)
-						stocks_parameters[product_number+product_list[1+i].id]--;
+						stocks_parameters[product_number+product_list[1+i]]--;
 				}
 				//by changing only the id pointing to the "empty" stock case, filling again this case will overwrite the previous serial number
 
