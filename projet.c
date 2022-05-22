@@ -400,7 +400,7 @@ void handleOrder(int signum, siginfo_t* info, void* context){
 
 int getDeltaMili(){
 	clock_t now = clock();
-	int delta = (end - begin) * 1000 /CLOCKS_PER_SEC;
+	int delta = (now - begin) * 1000 /CLOCKS_PER_SEC;
 	return delta;
 }
 
