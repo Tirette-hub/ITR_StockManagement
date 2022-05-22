@@ -378,7 +378,7 @@ void handleQuit(int signum){
 }
 
 void handleFullProductorStock(int signum, siginfo_t* info, void* context){
-	int productor_id = info.si_value.sival_int;
+	int productor_id = info->si_value.sival_int;
 
 	//int *product_id = segment_tab[productor_id];
 	int *serial_number = segment_tab[productor_id+product_number];
@@ -391,7 +391,7 @@ void handleFullProductorStock(int signum, siginfo_t* info, void* context){
 }
 
 void handleOrder(int signum, siginfo_t* info, void* context){
-	int client_id = info.si_value.sival_int;
+	int client_id = info->si_value.sival_int;
 	order_queue[count++] = client_id;
 }
 
