@@ -88,9 +88,6 @@ int quit = 0, count = 0;
 sem_t* semaphore;
 int product_size = sizeof(Product), productor_size = sizeof(Productor), client_size = sizeof(Client);
 
-volatile sig_atomic_t status;
-sigset_t mask;
-
 Product products[product_number];
 Productor productors[product_number]; //as many productors as products
 Client clients[client_number];
@@ -105,8 +102,6 @@ int order_queue[client_number];
 
 int main(int argc, char* argv[]){
 
-	srand(time(NULL) ^ (getpid() << 16));
-
 	signal(SIGINT, handleQuit);
 	other_pid = getpid();
 
@@ -116,29 +111,36 @@ int main(int argc, char* argv[]){
 	pid_t fvalue = fork();
 
 	if (fvalue != 0){
+		srand(time(NULL));
 		//gestionnaire
+		ManagerBehavior();
 	}else{
 		fvalue = fork();
 		if (fvalue != 0){
 			//producteurs
 			pthread_t threads_list[product_number];
-			//srand(time(NULL));
 			sem_init(semaphore, SEM_PRIVATE, 0);
 			//create threads
 			for (int i = 0; i < product_number; i++)
 				pthread_create(&threads_list[i], NULL, ProductorBehavior, NULL);
 
 			int* retval;
-			for (int i = 0; i < product_number; i++){
+			for (int i = 0; i < product_number; i++)
 				pthread_join(threads_list[i], (void*)&retval);
-			}
+
 			sem_destroy(semaphore);
 		}else{
-			srand(time(NULL));
-			sigfillset(&mask);
+			srand(time(NULL) ^ (getpid() << 16));
 			//clients
+			pthread_t threads_list[client_number];
 			sem_init(semaphore, SEM_PRIVATE, product_number + 10);
 			//create threads
+			for (int i = 0; i < client_number; i++)
+				pthread_create(&threads_list[i], NULL, ClientBehavior, NULL);
+			
+			int *retval;
+			for (int i = 0; i < client_number; i++)
+				pthread_join(threads_list[i], (void*)&retval);
 
 			sem_destroy(semaphore);
 		}
@@ -202,8 +204,6 @@ void* ProductorBehavior(void* unused){
 }
 
 void ManagerBehavior(){
-	srand(time(NULL));
-
 	//creating stocks
 	int max_stock_volume = 100; //total volume
 
@@ -323,7 +323,6 @@ void* ClientBehavior(void* unused){
 	int priority = 0;
 	const char buffer[1024];
 
-	status = EXPECTING;
 	union sigval envelope;
 	envelope.sival_int = self.id;
 
@@ -345,9 +344,6 @@ void* ClientBehavior(void* unused){
 
 		//Send signal to stock with the request
 		sigqueue(other_pid, SIGRTR, envelope);
-
-		sigdelset(&mask, EXPECTING);
-		sigprocmask(SIG_SETMASK, &mask, NULL);
 
 		size_t amount;
 
