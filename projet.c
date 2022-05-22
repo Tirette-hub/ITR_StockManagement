@@ -287,6 +287,8 @@ void ManagerBehavior(){
 void* ClientBehavior(void* unused){
 	int thread_retval = EXIT_SUCCESS;
 
+	Client self = clients[countClients++];
+
 	int min_time = self.min_time;
 	int max_time = self.max_time;
 
@@ -297,14 +299,15 @@ void* ClientBehavior(void* unused){
 
 	status = EXPECTING;
 	union sigval envelope;
+	envelope.sival_int = self.id;
 
-	Client self = clients[countClients++];
+	char* mq_name;
 
 	while(!quit){
 
 		//Open message queue
 		sprintf(mq_name, "/c%i-queue", id);
-		mdq_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
+		mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
 		if(queue == -1){
 			perror("mq_open");
 			return EXIT_FAILURE;
@@ -322,13 +325,15 @@ void* ClientBehavior(void* unused){
 		sigdelset(&mask, EXPECTING);
 		sigprocmask(SIG_SETMASK, &mask, NULL);
 
+		size_t amount;
+
 		// Wait for queue to be filled
 		do{
-			size_t amount = mq_receive(queue, buffer, 1024, &priority);
-		}While(amount == -1)
+			amount = mq_receive(queue, buffer, 1024, &priority);
+		}while(amount == -1);
 
 		mq_close(queue);
-		mq_unlink("")
+		mq_unlink("");
 
 	}
 
