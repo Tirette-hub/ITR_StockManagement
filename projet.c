@@ -104,6 +104,9 @@ int stocks_parameters[2*product_number]; //4 first int: max size of each stock, 
 int order_queue[client_number];
 
 int main(int argc, char* argv[]){
+
+	srand(time(NULL) ^ (getpid() << 16));
+
 	signal(SIGINT, handleQuit);
 	other_pid = getpid();
 
@@ -308,7 +311,57 @@ void ManagerBehavior(){
 void* ClientBehavior(void* unused){
 	int thread_retval = EXIT_SUCCESS;
 
+	sem_wait(semaphore);
+	Client self = clients[count++];
+	sem_psot(semaphore);
 
+	int min_time = self.min_time;
+	int max_time = self.max_time;
+
+	int id = self.id;
+
+	int priority = 0;
+	const char buffer[1024];
+
+	status = EXPECTING;
+	union sigval envelope;
+	envelope.sival_int = self.id;
+
+	char* mq_name;
+
+	//Open message queue
+	sprintf(mq_name, "/c%i-queue", id);
+	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
+	if(queue == -1){
+		perror("mq_open");
+		return EXIT_FAILURE;
+	}
+
+	while(!quit){
+		//Wait before send request
+		int wait_time = (rand() % (max_time - min_time)) + min_time;
+		sleep(wait_time);
+
+
+		//Send signal to stock with the request
+		sigqueue(other_pid, SIGRTR, envelope);
+
+		sigdelset(&mask, EXPECTING);
+		sigprocmask(SIG_SETMASK, &mask, NULL);
+
+		size_t amount;
+
+		// Wait for queue to be filled
+		do{
+			amount = mq_receive(queue, buffer, 1024, &priority);
+		}while(amount == -1);
+
+		printf("[%d] received order: %s");
+
+	}
+
+	mq_close(queue);
+	mq_unlink(mq_name);
 
 	pthread_exit(&thread_retval);
 }
