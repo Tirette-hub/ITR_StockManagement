@@ -16,11 +16,11 @@
 
 #include <signal.h>
 
-#ifndef SYS_gettid
-#error "SYS_gettid unavailable on this system"
+/*#ifndef SYS_gettid
+#error SYS_gettid unavailable on this system
 #endif
 
-#define gettid() ((pid_t)syscall(SYS_gettid))
+#define gettid() ((pid_t)syscall(SYS_gettid))*/
 
 #define SEM_PRIVATE 0
 
@@ -111,13 +111,15 @@ int main(int argc, char* argv[]){
 	pid_t fvalue = fork();
 
 	if (fvalue != 0){
-		srand(time(NULL));
+		//srand(time(NULL));
 		//gestionnaire
+		printf("\rCreating stock manager\n");
 		ManagerBehavior();
 	}else{
 		fvalue = fork();
 		if (fvalue != 0){
 			//producteurs
+			printf("\rcreating productors\n");
 			pthread_t threads_list[product_number];
 			sem_init(semaphore, SEM_PRIVATE, 0);
 			//create threads
@@ -132,6 +134,7 @@ int main(int argc, char* argv[]){
 		}else{
 			srand(time(NULL) ^ (getpid() << 16));
 			//clients
+			printf("\rCreating clients\n");
 			pthread_t threads_list[client_number];
 			sem_init(semaphore, SEM_PRIVATE, product_number + 10);
 			//create threads
@@ -163,6 +166,7 @@ void* ProductorBehavior(void* unused){
 	//link this thread to a specific productor defined previously
 	//create key to create a shared memory
 	sem_wait(semaphore);
+	printf("\r[Productor %i] created\n", count);
 	key_t ipc_key = ftok("projet.c", count);
 	Productor self = productors[count++];
 	sem_post(semaphore);
@@ -184,14 +188,19 @@ void* ProductorBehavior(void* unused){
 			//wait for day time or the manager to empty the local stock
 		}
 
+		printf("\r[Productor %i] producting\n", self.product_id);
+
 		//product (new serial number)
 		*serial_id = serial_number++;
 
 		//send a signal to parent, notifying him a product is ready
+		printf("\r[Productor %i] notifying the stock manager the production\n", self.product_id);
 		sigqueue(other_pid, SIGRTF, envelope);
 
 		sleep(self.production_time);
 	}
+
+	printf("\r[Productor %i] production stopped\n", self.product_id);
 
 	//free the shm allocated
 	if ( shmctl (shmid, IPC_RMID, NULL) == -1)
@@ -238,6 +247,7 @@ void ManagerBehavior(){
 		stocks_parameters[i+product_number] = 0;
 		stocks[i] = stock;
 	}
+	printf("[Stock Manager] stock has been partitionned\n");
 
 	//creating shm
 	for (int i = 0; i < product_number; i++){
@@ -245,11 +255,13 @@ void ManagerBehavior(){
 		segment_tab[i] = shmat(shmid_tab[i], NULL, 0);
 		segment_tab[i+product_number] = segment_tab[i]+1;
 	}
+	printf("[Stock Manager] shm have been found\n");
 
 	//create message queues to communicate with clients
 	mqd_t message_queues[client_number];
 
 	char* s;
+	printf("\r[Stock Manager] Opening Message Queues\n");
 	for (int i = 0; i < client_number; i++){
 		do{
 			sprintf(s, "/c%i-queue", i);
@@ -258,6 +270,7 @@ void ManagerBehavior(){
 	}
 
 	//expect signals from Productors or Clients
+	printf("[Stock Manager] Allows the Productors and the Clients to send signals\n");
 	struct sigaction descriptor;
 	descriptor.sa_flags=SA_SIGINFO;
 	descriptor.sa_sigaction = handleFullProductorStock;
@@ -279,15 +292,16 @@ void ManagerBehavior(){
 					if (stocks_parameters[product_number+product_list[1+i]] < product_list[i+2])
 						deliverable = false;
 
-				//empty stocks
-				for (int i = 0; i < number_of_products; i++){
-					int number_to_send = product_list[i+2];
-					for (int j = 0; j < number_to_send; j++)
-						stocks_parameters[product_number+product_list[1+i]]--;
-				}
-				//by changing only the id pointing to the "empty" stock case, filling again this case will overwrite the previous serial number
-
 				if (deliverable){
+					printf("\r[Stock Manager] found a deliverable order\n");
+					//empty stocks
+					for (int i = 0; i < number_of_products; i++){
+						int number_to_send = product_list[i+2];
+						for (int j = 0; j < number_to_send; j++)
+							stocks_parameters[product_number+product_list[1+i]]--;
+					}
+					//by changing only the id pointing to the "empty" stock case, filling again this case will overwrite the previous serial number
+
 					int status = mq_send(message_queues[client_id], s, strlen(s), 0);
 					if (status == -1)
 						printf("Error trying to send message via queue: %s to client n_%i\n", s, client_id);
@@ -295,6 +309,8 @@ void ManagerBehavior(){
 			}
 		}
 	}
+
+	printf("\r[Stock Manager] free shm and message queues\n");
 
 	//free shm
 	for (int i = 0; i < product_number; i++){
@@ -312,6 +328,7 @@ void* ClientBehavior(void* unused){
 	int thread_retval = EXIT_SUCCESS;
 
 	sem_wait(semaphore);
+	printf("[Client %i] created\n", count);
 	Client self = clients[count++];
 	sem_post(semaphore);
 
@@ -340,23 +357,27 @@ void* ClientBehavior(void* unused){
 	while(!quit){
 		//Wait before send request
 		int wait_time = (rand() % (max_time - min_time)) + min_time;
+		printf("\r[Client %i] wait for %isec before to send an order\n", self.id);
 		sleep(wait_time);
 
 
+		printf("[Client %i] sending signal to stock manager (same thing as sending an order)\n", self.id);
 		//Send signal to stock with the request
 		sigqueue(other_pid, SIGRTR, envelope);
 
 		size_t amount;
 
 		// Wait for queue to be filled
+		printf("[Client %i] waiting for stock manager to send back the order\n", self.id);
 		do{
 			amount = mq_receive(queue, buffer, 1024, &priority);
 		}while(amount == -1);
 
-		printf("[%d] received order: %s");
+		printf("[Client %i] received order: %s", self.id, buffer);
 
 	}
 
+	printf("[Client %i] closing message queues\n", self.id);
 	mq_close(queue);
 	mq_unlink(mq_name);
 
