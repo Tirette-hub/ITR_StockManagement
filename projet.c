@@ -298,7 +298,7 @@ void ManagerBehavior(){
 
 	//free shm
 	for (int i = 0; i < product_number; i++){
-		shmctl(shmid, IPC_RMID, NULL);
+		shmctl(shmid_tab[i], IPC_RMID, NULL);
 		shmdt(segment_tab[i]);
 		shmdt(segment_tab[i+product_number]);
 	}
