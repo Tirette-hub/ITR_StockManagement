@@ -313,7 +313,7 @@ void* ClientBehavior(void* unused){
 
 	sem_wait(semaphore);
 	Client self = clients[count++];
-	sem_psot(semaphore);
+	sem_post(semaphore);
 
 	int min_time = self.min_time;
 	int max_time = self.max_time;
@@ -321,7 +321,7 @@ void* ClientBehavior(void* unused){
 	int id = self.id;
 
 	int priority = 0;
-	const char buffer[1024];
+	char buffer[1024];
 
 	union sigval envelope;
 	envelope.sival_int = self.id;
@@ -333,7 +333,8 @@ void* ClientBehavior(void* unused){
 	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
 	if(queue == -1){
 		perror("mq_open");
-		return EXIT_FAILURE;
+		thread_retval = EXIT_FAILURE;
+		quit = true;
 	}
 
 	while(!quit){
