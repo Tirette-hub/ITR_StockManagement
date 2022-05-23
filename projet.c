@@ -125,7 +125,6 @@ int main(int argc, char* argv[]){
 			//producteurs
 			printf("\rcreating productors\n");
 			pthread_t threads_list[product_number];
-			printf("\rcreating a semaphore\n");
 			sem_init(&semaphore, SEM_PRIVATE, 0);
 			//create threads
 			printf("\rcreating productors threads\n");
@@ -143,7 +142,6 @@ int main(int argc, char* argv[]){
 			//clients
 			printf("\rCreating clients\n");
 			pthread_t threads_list[client_number];
-			printf("\rcreating a semaphore\n");
 			sem_init(&semaphore, SEM_PRIVATE, product_number + 10);
 			//create threads
 			printf("\rcreating clients threads\n");
@@ -283,6 +281,8 @@ void ManagerBehavior(){
 		//printf("\tdid it\n");
 	}
 
+	bzero(s, 1024);
+
 	//expect signals from Productors or Clients
 	printf("[Stock Manager] Allows the Productors and the Clients to send signals\n");
 	struct sigaction descriptor;
@@ -369,7 +369,7 @@ void* ClientBehavior(void* unused){
 
 	//Open message queue
 	printf("\r[Client %i] creating message queue\n", self.id);
-	sprintf(mq_name, "/c%i-queue");
+	sprintf(mq_name, "/c%i-queue", self.id);
 	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
 	if(queue == -1){
 		printf("mq_open error\n");
