@@ -4,7 +4,7 @@ _The **SIGRT** arrow from **SM** to **P** is not in use anymore_
 
 # HOW TO RUN
 ```
-gcc projet.c -lm -pthread -lrt -o projet && ./projet
+gcc projet.c -lm -pthread -lrt -o projet && sudo ./projet
 ```
 *do not try now, not tested yet, just read the code*
 

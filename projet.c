@@ -45,8 +45,8 @@ typedef enum{false, true} bool;
 
 //RT signals
 #define SIGRTF (SIGRTMIN + 0)	//SIGnal Real Time "Full"				//from productor to stock manager
-#define SIGRTR (SIGRTMIN + 0)	//SIGnal Real Time "Ready"				//from client to stock manager OR stock manager to others
-#define SIGRTP (SIGRTMIN + 1)	//SIGnal Real Time "Productor"			//from productor to stock manager
+#define SIGRTR (SIGRTMIN + 0)	//SIGnal Real Time "Ready"				//from client to stock manager
+#define SIGRTP (SIGRTMIN + 2)	//SIGnal Real Time "Productor"			//from productor to stock manager
 #define SIGRTC (SIGRTMIN + 1)	//SIGnal Real Time "Client"				//from client to stock manager
 
 //data structures
@@ -132,14 +132,18 @@ int main(int argc, char* argv[]){
 		fvalue = fork();
 		struct sigaction descriptor;
 		descriptor.sa_flags=SA_SIGINFO;
-		if (fvalue != 0){
-			descriptor.sa_sigaction = handleReady;
-			sigaction(SIGRTR, &descriptor, NULL);
+		descriptor.sa_sigaction = handleReady;
+		sigaction(SIGRTR, &descriptor, NULL);
 
+		sigdelset(&mask, SIGRTR);
+		sigprocmask(SIG_SETMASK, &mask, NULL);
+
+		if (fvalue != 0){
 			//producteurs
 			printf("\r[%ld]creating productors\n", getpid());
 			pthread_t threads_list[product_number];
 			sem_init(&semaphore, SEM_PRIVATE, 1);
+
 			//create threads
 			for (int i = 0; i < product_number; i++)
 				pthread_create(&threads_list[i], NULL, ProductorBehavior, NULL);
@@ -150,14 +154,12 @@ int main(int argc, char* argv[]){
 
 			sem_destroy(&semaphore);
 		}else{
-			descriptor.sa_sigaction = handleReady;
-			sigaction(SIGRTR, &descriptor, NULL);
-
 			srand(time(NULL) ^ (getpid() << 16));
 			//clients
 			printf("\r[%ld]Creating clients\n", getpid());
 			pthread_t threads_list[client_number];
 			sem_init(&semaphore, SEM_PRIVATE, product_number + 1);
+
 			//create threads
 			for (int i = 0; i < client_number; i++)
 				pthread_create(&threads_list[i], NULL, ClientBehavior, NULL);
@@ -189,7 +191,6 @@ void* ProductorBehavior(void* unused){
 
 	//link this thread to a specific productor defined previously
 	//create key to create a shared memory
-	printf("\rProductor awaiting for semaphore\n");
 	sem_wait(&semaphore);
 	printf("\r[Productor %i] created\n", count);
 	key_t ipc_key = ftok("projet.c", count);
@@ -211,10 +212,6 @@ void* ProductorBehavior(void* unused){
 
 	if (self.product_id == product_number-1)
 		sigqueue(other_pid, SIGRTP, envelope);
-
-	//expect stock manager to send ready status
-	sigdelset(&mask, SIGRTR);
-	sigprocmask(SIG_SETMASK, &mask, NULL);
 
 	while(status == EXPECTING){
 		//wait stock manager to tell he is ok
@@ -281,7 +278,9 @@ void ManagerBehavior(){
 
 	//expect productors and clients to tell Stock Manager they have started
 	sigdelset(&mask, SIGRTP);
+	sigdelset(&mask, SIGRTC);
 	sigprocmask(SIG_SETMASK, &mask, NULL);
+	//sigprocmask(SIG_SETMASK, &mask, NULL);
 
 	//what we want to perform modularly from this data set
 	/*int apple_stock[34];	//34V
@@ -316,6 +315,7 @@ void ManagerBehavior(){
 	}
 	printf("[Stock Manager] stock has been partitionned\n");
 
+	printf("\r[Stock Manager] expecting signal from productor for ready status\n");
 	while(status == EXPECTING_P){
 		//wait for productors to be ready
 		if (status == __FINAL__){
@@ -335,6 +335,12 @@ void ManagerBehavior(){
 	//create message queues to communicate with clients
 	mqd_t message_queues[client_number];
 
+	//expects clients to send ready status
+	/*sigdelset(&mask, SIGRTC);
+	sigprocmask(SIG_SETMASK, &mask, NULL);*/
+
+	printf("\r[Stock Manager] expecting signal from clients for ready status\n");
+
 	while(status == EXPECTING_C){
 		//wait for clients to be ready
 		if (status == __FINAL__){
@@ -353,12 +359,12 @@ void ManagerBehavior(){
 	for (int i = 0; i < client_number; i++){
 		printf("\r[Stock Manager] Opening client %i message queue\n", i);
 		do{
-			printf("\tTrying %i\n", i);
+			//printf("\tTrying %i\n", i);
 			sprintf(s, "/c%i-queue", i);
-			printf("\rtest\n");
+			//printf("\rtest\n");
 			message_queues[i] = mq_open(s, O_WRONLY);
 		}while(message_queues[i] == -1);
-		printf("\tdid it\n");
+		//printf("\tdid it\n");
 	}
 	//send clients ready message queues status
 	sigqueue(clients_pid, SIGRTR, envelope);
@@ -425,12 +431,10 @@ void* ClientBehavior(void* unused){
 
 	status = EXPECTING;
 
-	printf("Client awaiting for semaphore\n");
 	sem_wait(&semaphore);
 	printf("[Client %i] created\n", count);
 	Client self = clients[count++];
 	sem_post(&semaphore);
-	printf("\rClient released semaphore\n");
 
 	int min_time = self.min_time;
 	int max_time = self.max_time;
@@ -446,23 +450,19 @@ void* ClientBehavior(void* unused){
 	char* mq_name = malloc(10*sizeof(char));
 
 	//Open message queue
-	printf("\r[Client %i] creating message queue %i\n", self.id, id);
 	sprintf(mq_name, "/c%i-queue", self.id);
+	printf("\r[Client %i] creating message queue \"%s\"\n", self.id, mq_name);
 	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
-
-	//expects stock manager to tell message queues are ready
-	sigdelset(&mask, SIGRTR);
-	sigprocmask(SIG_SETMASK, &mask, NULL);
 
 	if(queue == -1){
 		printf("mq_open error\n");
 		thread_retval = EXIT_FAILURE;
 		quit = __FINAL__;
+		sem_wait(&semaphore);
 		sigaddset(&mask, SIGRTR);
 		sigprocmask(SIG_SETMASK, &mask, NULL);
+		sem_post(&semaphore);
 	}
-
-	printf("\r[Client %i] main loop\n", self.id);
 
 	if(self.id == client_number-1)
 		sigqueue(other_pid, SIGRTC, envelope); //could maybe be removed
@@ -470,6 +470,8 @@ void* ClientBehavior(void* unused){
 	while(status == EXPECTING){
 		//wait for stock manager to send ready status
 	}
+
+	printf("\r[Client %i] main loop\n", self.id);
 
 	while(status == OPERATING){
 		//Wait before send request
@@ -561,11 +563,12 @@ void handleClientStarted(int signum, siginfo_t* info, void* context){
 	//procmask
 	clients_pid = info->si_pid;
 
+	printf("\r[Stock Manager] client is ready: %i\n", info->si_pid);
+
 	sigaddset(&mask, SIGRTC);
 	sigprocmask(SIG_SETMASK, &mask, NULL);
 
 	while(status != EXPECTING_C){
-
 	}
 	status = OPERATING;
 }
@@ -573,6 +576,8 @@ void handleClientStarted(int signum, siginfo_t* info, void* context){
 void handleProductorStarted(int signum, siginfo_t* info, void* context){
 	//procmask
 	productors_pid = info->si_pid;
+
+	printf("\r[Stock Manager] productor is ready: %i\n", info->si_pid);
 
 	sigaddset(&mask, SIGRTP);
 	sigprocmask(SIG_SETMASK, &mask, NULL);
