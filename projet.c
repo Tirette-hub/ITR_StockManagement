@@ -44,10 +44,10 @@
 typedef enum{false, true} bool;
 
 //RT signals
-#define SIGRTF (SIGRTMIN + 0)	//SIGnal Real Time "Full"				//from productor to stock manager
-#define SIGRTR (SIGRTMIN + 0)	//SIGnal Real Time "Ready"				//from client to stock manager
-#define SIGRTP (SIGRTMIN + 2)	//SIGnal Real Time "Productor"			//from productor to stock manager
-#define SIGRTC (SIGRTMIN + 1)	//SIGnal Real Time "Client"				//from client to stock manager
+#define SIGRTR (SIGRTMIN + 0)	//SIGnal Real Time "Ready"		//from client to stock manager
+#define SIGRTF (SIGRTMIN + 1)	//SIGnal Real Time "Full"		//from productor to stock manager
+#define SIGRTC (SIGRTMIN + 2)	//SIGnal Real Time "Client"		//from client to stock manager
+#define SIGRTP (SIGRTMIN + 3)	//SIGnal Real Time "Productor"	//from productor to stock manager
 
 //data structures
 typedef struct Product{
@@ -93,6 +93,8 @@ void createDataSet();
 volatile sig_atomic_t status = __START__;
 sigset_t mask;
 
+union sigval envelope;
+
 pid_t other_pid, productors_pid, clients_pid;
 int quit = 0, count = 0;
 sem_t semaphore;
@@ -129,6 +131,7 @@ int main(int argc, char* argv[]){
 			sleep(1);
 		}*/
 	}else{
+		printf("\rother pid = %d\n", other_pid);
 		fvalue = fork();
 		struct sigaction descriptor;
 		descriptor.sa_flags=SA_SIGINFO;
@@ -186,7 +189,6 @@ void* ProductorBehavior(void* unused){
 	//local variables
 	//Product product = products[self.product_id];
 	int shmid, serial_number = 1;
-	union sigval envelope;
 	unsigned int *local_stock, *serial_id;
 
 	//link this thread to a specific productor defined previously
@@ -196,8 +198,6 @@ void* ProductorBehavior(void* unused){
 	key_t ipc_key = ftok("projet.c", count);
 	Productor self = productors[count++];
 	sem_post(&semaphore);
-
-	envelope.sival_int = self.product_id;
 
 	//create local stock
 	shmid = shmget(ipc_key, 2*sizeof(int), IPC_CREAT | 0600); //check how to create the unique id for product identification
@@ -210,8 +210,12 @@ void* ProductorBehavior(void* unused){
 
 	*serial_id = -1;
 
-	if (self.product_id == product_number-1)
+	sem_wait(&semaphore);
+	if (self.product_id == product_number-1){
+		envelope.sival_int = self.product_id;
 		sigqueue(other_pid, SIGRTP, envelope);
+	}
+	sem_post(&semaphore);
 
 	while(status == EXPECTING){
 		//wait stock manager to tell he is ok
@@ -240,7 +244,10 @@ void* ProductorBehavior(void* unused){
 
 		//send a signal to parent, notifying him a product is ready
 		printf("\r[Productor %i] notifying the stock manager the production\n", self.product_id);
+		sem_wait(&semaphore);
+		envelope.sival_int = self.product_id;
 		sigqueue(other_pid, SIGRTF, envelope);
+		sem_post(&semaphore);
 
 		sleep(self.production_time);
 	}
@@ -261,8 +268,6 @@ void ManagerBehavior(){
 	//creating stocks
 	int max_stock_volume = 100; //total volume
 
-	union sigval envelope;
-
 	struct sigaction descriptor;
 	descriptor.sa_flags=SA_SIGINFO;
 	descriptor.sa_sigaction = handleFullProductorStock;
@@ -279,6 +284,8 @@ void ManagerBehavior(){
 	//expect productors and clients to tell Stock Manager they have started
 	sigdelset(&mask, SIGRTP);
 	sigdelset(&mask, SIGRTC);
+	sigdelset(&mask, SIGRTF);
+	sigdelset(&mask, SIGRTR);
 	sigprocmask(SIG_SETMASK, &mask, NULL);
 	//sigprocmask(SIG_SETMASK, &mask, NULL);
 
@@ -410,6 +417,9 @@ void ManagerBehavior(){
 		}
 	}
 
+	sigaddset(&mask, SIGRTR);
+	sigaddset(&mask, SIGRTF);
+
 	printf("\r[Stock Manager] free shm and message queues\n");
 
 	//free shm
@@ -444,9 +454,6 @@ void* ClientBehavior(void* unused){
 	int priority = 0;
 	char buffer[1024];
 
-	union sigval envelope;
-	envelope.sival_int = self.id;
-
 	char* mq_name = malloc(10*sizeof(char));
 
 	//Open message queue
@@ -464,8 +471,12 @@ void* ClientBehavior(void* unused){
 		sem_post(&semaphore);
 	}
 
-	if(self.id == client_number-1)
+	if(self.id == client_number-1){
+		sem_wait(&semaphore);
+		envelope.sival_int = self.id;
 		sigqueue(other_pid, SIGRTC, envelope); //could maybe be removed
+		sem_post(&semaphore);
+	}
 
 	while(status == EXPECTING){
 		//wait for stock manager to send ready status
@@ -482,7 +493,10 @@ void* ClientBehavior(void* unused){
 
 		printf("[Client %i] sending signal to stock manager (same thing as sending an order)\n", self.id);
 		//Send signal to stock with the request
+		sem_wait(&semaphore);
+		envelope.sival_int = self.id;
 		sigqueue(other_pid, SIGRTR, envelope);
+		sem_post(&semaphore);
 
 		size_t amount;
 
