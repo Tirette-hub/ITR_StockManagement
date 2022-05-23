@@ -321,6 +321,8 @@ void ManagerBehavior(){
 					int status = mq_send(message_queues[client_id], s, strlen(s), 0);
 					if (status == -1)
 						printf("Error trying to send message via queue: %s to client n_%i\n", s, client_id);
+
+					bzero(s, 1024)
 				}
 			}
 		}
@@ -334,6 +336,8 @@ void ManagerBehavior(){
 		shmdt(segment_tab[i]);
 		shmdt(segment_tab[i+product_number]);
 	}
+
+	free(s);
 
 	//close message queues
 	for(int i = 0; i < client_number; i++)
@@ -361,7 +365,7 @@ void* ClientBehavior(void* unused){
 	union sigval envelope;
 	envelope.sival_int = self.id;
 
-	char mq_name[10];
+	char* mq_name = malloc(10*sizeof(char));
 
 	//Open message queue
 	printf("\r[Client %i] creating message queue\n", self.id);
@@ -401,6 +405,8 @@ void* ClientBehavior(void* unused){
 	printf("[Client %i] closing message queues\n", self.id);
 	mq_close(queue);
 	mq_unlink(mq_name);
+
+	free(mq_name);
 
 	pthread_exit(&thread_retval);
 }
