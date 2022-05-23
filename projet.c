@@ -224,6 +224,16 @@ void* ProductorBehavior(void* unused){
 	while(status == OPERATING){
 		while(!isDayTime() || *serial_id != -1){
 			//wait for day time or the manager to empty the local stock
+			if (status == __FINAL__){
+				//free the shm allocated
+				if ( shmctl (shmid, IPC_RMID, NULL) == -1)
+					perror ("shmctl");
+
+				shmdt(local_stock);
+				shmdt(serial_id);
+
+				pthread_exit(&thread_retval);
+			}
 		}
 
 		printf("\r[Productor %i] producting\n", self.product_id);
@@ -308,6 +318,9 @@ void ManagerBehavior(){
 
 	while(status == EXPECTING_P){
 		//wait for productors to be ready
+		if (status == __FINAL__){
+			return;
+		}
 	}
 	//creating shm
 	for (int i = 0; i < product_number; i++){
@@ -324,6 +337,15 @@ void ManagerBehavior(){
 
 	while(status == EXPECTING_C){
 		//wait for clients to be ready
+		if (status == __FINAL__){
+			//free shm
+			for (int i = 0; i < product_number; i++){
+				shmctl(shmid_tab[i], IPC_RMID, NULL);
+				shmdt(segment_tab[i]);
+				shmdt(segment_tab[i+product_number]);
+			}
+			return;
+		}
 	}
 
 	char *s = malloc(1024*sizeof(char));
@@ -331,8 +353,9 @@ void ManagerBehavior(){
 	for (int i = 0; i < client_number; i++){
 		printf("\r[Stock Manager] Opening client %i message queue\n", i);
 		do{
-			//printf("\tTrying %i\n", i);
+			printf("\tTrying %i\n", i);
 			sprintf(s, "/c%i-queue", i);
+			printf("\rtest\n");
 			message_queues[i] = mq_open(s, O_WRONLY);
 		}while(message_queues[i] == -1);
 		printf("\tdid it\n");
@@ -465,6 +488,15 @@ void* ClientBehavior(void* unused){
 		printf("[Client %i] waiting for stock manager to send back the order\n", self.id);
 		do{
 			amount = mq_receive(queue, buffer, 1024, &priority);
+			if (status == __FINAL__){
+				printf("[Client %i] closing message queues\n", self.id);
+				mq_close(queue);
+				mq_unlink(mq_name);
+
+				free(mq_name);
+
+				pthread_exit(&thread_retval);
+			}
 		}while(amount == -1);
 
 		printf("[Client %i] received order: %s", self.id, buffer);
@@ -493,6 +525,8 @@ void handleQuit(int signum){
 void handleFullProductorStock(int signum, siginfo_t* info, void* context){
 	int productor_id = info->si_value.sival_int;
 
+	printf("\r[Stock Manager] received a full stock signal from productor %i\n", productor_id);
+
 	//int *product_id = segment_tab[productor_id];
 	int *serial_number = segment_tab[productor_id+product_number];
 
@@ -506,6 +540,8 @@ void handleFullProductorStock(int signum, siginfo_t* info, void* context){
 void handleOrder(int signum, siginfo_t* info, void* context){
 	int client_id = info->si_value.sival_int;
 	order_queue[count++] = client_id;
+
+	printf("\r[Stock Manager] received an order signal from client %i\n", client_id);
 }
 
 void handleReady(int signum, siginfo_t* info, void* context){
@@ -513,7 +549,12 @@ void handleReady(int signum, siginfo_t* info, void* context){
 	sigaddset(&mask, SIGRTR);
 	sigprocmask(SIG_SETMASK, &mask, NULL);
 
-	status = OPERATING;
+	printf("[%ld] stock manager is ready\n", getpid());
+
+	sem_wait(&semaphore);
+	if (status == EXPECTING)
+		status = OPERATING;
+	sem_post(&semaphore);
 }
 
 void handleClientStarted(int signum, siginfo_t* info, void* context){
