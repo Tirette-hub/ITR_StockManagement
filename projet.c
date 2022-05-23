@@ -23,6 +23,7 @@
 #define gettid() ((pid_t)syscall(SYS_gettid))*/
 
 #define SEM_PRIVATE 0
+#define SEM_SHARED 1
 
 #define SHM_RDWR 0
 
@@ -85,7 +86,7 @@ void createDataSet();
 //global variables
 pid_t other_pid;
 int quit = 0, count = 0;
-sem_t* semaphore;
+sem_t semaphore;
 int product_size = sizeof(Product), productor_size = sizeof(Productor), client_size = sizeof(Client);
 
 Product products[product_number];
@@ -115,39 +116,49 @@ int main(int argc, char* argv[]){
 		//gestionnaire
 		printf("\rCreating stock manager\n");
 		ManagerBehavior();
+		/*while(!quit){
+			sleep(1);
+		}*/
 	}else{
 		fvalue = fork();
 		if (fvalue != 0){
 			//producteurs
 			printf("\rcreating productors\n");
 			pthread_t threads_list[product_number];
-			sem_init(semaphore, SEM_PRIVATE, 0);
+			printf("\rcreating a semaphore\n");
+			sem_init(&semaphore, SEM_PRIVATE, 0);
 			//create threads
+			printf("\rcreating productors threads\n");
 			for (int i = 0; i < product_number; i++)
 				pthread_create(&threads_list[i], NULL, ProductorBehavior, NULL);
 
 			int* retval;
+			printf("\rjoining productors threads\n");
 			for (int i = 0; i < product_number; i++)
 				pthread_join(threads_list[i], (void*)&retval);
 
-			sem_destroy(semaphore);
+			sem_destroy(&semaphore);
 		}else{
 			srand(time(NULL) ^ (getpid() << 16));
 			//clients
 			printf("\rCreating clients\n");
 			pthread_t threads_list[client_number];
-			sem_init(semaphore, SEM_PRIVATE, product_number + 10);
+			printf("\rcreating a semaphore\n");
+			sem_init(&semaphore, SEM_PRIVATE, product_number + 10);
 			//create threads
+			printf("\rcreating clients threads\n");
 			for (int i = 0; i < client_number; i++)
 				pthread_create(&threads_list[i], NULL, ClientBehavior, NULL);
 			
 			int *retval;
+			printf("\rjoining clients threads\n");
 			for (int i = 0; i < client_number; i++)
 				pthread_join(threads_list[i], (void*)&retval);
 
-			sem_destroy(semaphore);
+			sem_destroy(&semaphore);
 		}
 	}
+	printf("\rfinishing process\n");
 	return EXIT_SUCCESS;
 }
 
@@ -165,11 +176,11 @@ void* ProductorBehavior(void* unused){
 
 	//link this thread to a specific productor defined previously
 	//create key to create a shared memory
-	sem_wait(semaphore);
+	sem_wait(&semaphore);
 	printf("\r[Productor %i] created\n", count);
 	key_t ipc_key = ftok("projet.c", count);
 	Productor self = productors[count++];
-	sem_post(semaphore);
+	sem_post(&semaphore);
 
 	envelope.sival_int = self.product_id;
 
@@ -263,10 +274,13 @@ void ManagerBehavior(){
 	char* s;
 	printf("\r[Stock Manager] Opening Message Queues\n");
 	for (int i = 0; i < client_number; i++){
+		printf("\r[Stock Manager] Opening client %i message queue\n", i);
 		do{
+			//printf("\tTrying\n");
 			sprintf(s, "/c%i-queue", i);
 			message_queues[i] = mq_open(s, O_WRONLY);
 		}while(message_queues[i] == -1);
+		//printf("\tdid it\n");
 	}
 
 	//expect signals from Productors or Clients
@@ -327,10 +341,12 @@ void ManagerBehavior(){
 void* ClientBehavior(void* unused){
 	int thread_retval = EXIT_SUCCESS;
 
-	sem_wait(semaphore);
+	printf("Client awaiting for semaphore\n");
+	sem_wait(&semaphore);
 	printf("[Client %i] created\n", count);
 	Client self = clients[count++];
-	sem_post(semaphore);
+	sem_post(&semaphore);
+	printf("\rClient released semaphore\n");
 
 	int min_time = self.min_time;
 	int max_time = self.max_time;
@@ -346,13 +362,17 @@ void* ClientBehavior(void* unused){
 	char* mq_name;
 
 	//Open message queue
+	printf("\r[Client %i] creating message queue\n", self.id);
 	sprintf(mq_name, "/c%i-queue", id);
 	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
+	printf("\r[Client %i] test\n", self.id);
 	if(queue == -1){
-		perror("mq_open");
+		printf("mq_open error\n");
 		thread_retval = EXIT_FAILURE;
-		quit = true;
+		quit = 1;
 	}
+
+	printf("\r[Client %i] main loop; quit = %i\n", self.id, quit);
 
 	while(!quit){
 		//Wait before send request
@@ -388,15 +408,10 @@ void* ClientBehavior(void* unused){
 //handlers
 
 void handleQuit(int signum){
-	if (semaphore != NULL){
-		if (quit == 0){
-			sem_wait(semaphore);
-			quit = 1;
-			sem_post(semaphore);
-		}
-	}
-	else
+	printf("\rquitting\n");
+	if (quit == 0){
 		quit = 1;
+	}
 }
 
 void handleFullProductorStock(int signum, siginfo_t* info, void* context){
