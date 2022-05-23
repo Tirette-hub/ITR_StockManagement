@@ -271,7 +271,7 @@ void ManagerBehavior(){
 	//create message queues to communicate with clients
 	mqd_t message_queues[client_number];
 
-	char* s;
+	char *s = malloc(1024*sizeof(char));
 	printf("\r[Stock Manager] Opening Message Queues\n");
 	for (int i = 0; i < client_number; i++){
 		printf("\r[Stock Manager] Opening client %i message queue\n", i);
@@ -311,8 +311,10 @@ void ManagerBehavior(){
 					//empty stocks
 					for (int i = 0; i < number_of_products; i++){
 						int number_to_send = product_list[i+2];
-						for (int j = 0; j < number_to_send; j++)
+						for (int j = 0; j < number_to_send; j++){
+							format(s, stocks_parameters[product_number+product_list[1+i]]);
 							stocks_parameters[product_number+product_list[1+i]]--;
+						}
 					}
 					//by changing only the id pointing to the "empty" stock case, filling again this case will overwrite the previous serial number
 
@@ -359,13 +361,12 @@ void* ClientBehavior(void* unused){
 	union sigval envelope;
 	envelope.sival_int = self.id;
 
-	char* mq_name;
+	char mq_name[10];
 
 	//Open message queue
 	printf("\r[Client %i] creating message queue\n", self.id);
-	sprintf(mq_name, "/c%i-queue", id);
+	sprintf(&mq_name, "/c%i-queue");
 	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
-	printf("\r[Client %i] test\n", self.id);
 	if(queue == -1){
 		printf("mq_open error\n");
 		thread_retval = EXIT_FAILURE;
@@ -377,7 +378,7 @@ void* ClientBehavior(void* unused){
 	while(!quit){
 		//Wait before send request
 		int wait_time = (rand() % (max_time - min_time)) + min_time;
-		printf("\r[Client %i] wait for %isec before to send an order\n", self.id);
+		printf("\r[Client %i] wait for %isec before to send an order\n", self.id, wait_time);
 		sleep(wait_time);
 
 
