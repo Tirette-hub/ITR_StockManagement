@@ -322,7 +322,7 @@ void ManagerBehavior(){
 					if (status == -1)
 						printf("Error trying to send message via queue: %s to client n_%i\n", s, client_id);
 
-					bzero(s, 1024)
+					bzero(s, 1024);
 				}
 			}
 		}
@@ -369,7 +369,7 @@ void* ClientBehavior(void* unused){
 
 	//Open message queue
 	printf("\r[Client %i] creating message queue\n", self.id);
-	sprintf(&mq_name, "/c%i-queue");
+	sprintf(mq_name, "/c%i-queue");
 	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
 	if(queue == -1){
 		printf("mq_open error\n");
