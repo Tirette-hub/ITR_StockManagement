@@ -36,12 +36,12 @@
 
 #define DAY_DURATION 16
 #define NIGHT_DURATION 8
-#define UT 2000 //1Unit of Time = 2000ms => 1sec = .5 UT
+#define UT 2 //1Unit of Time = 2sec => 1sec = .5 UT
 //one day is represented by 24 unit of time
 
 #define product_number 4
 #define client_number 2
-typedef enum{false, true} bool;
+typedef enum{false = 0, true = 1} bool;
 
 //RT signals
 #define SIGRTR (SIGRTMIN + 0)	//SIGnal Real Time "Ready"		//from client to stock manager
@@ -81,7 +81,7 @@ void handleReady(int, siginfo_t*, void*);
 
 //getters
 int getDeltaMili();
-bool isDayTime();
+int isDayTime();
 int roundStock(double, int);
 char* format(char*, int);
 
@@ -127,11 +127,7 @@ int main(int argc, char* argv[]){
 		//gestionnaire
 		printf("\r[%ld]Creating stock manager\n", getpid());
 		ManagerBehavior();
-		/*while(!quit){
-			sleep(1);
-		}*/
 	}else{
-		printf("\rother pid = %d\n", other_pid);
 		fvalue = fork();
 		struct sigaction descriptor;
 		descriptor.sa_flags=SA_SIGINFO;
@@ -237,10 +233,10 @@ void* ProductorBehavior(void* unused){
 			}
 		}
 
-		printf("\r[Productor %i] producting\n", self.product_id);
-
 		//product (new serial number)
 		*serial_id = serial_number++;
+
+		printf("\r[Productor %i] producting (%i)\n", self.product_id, *serial_id);
 
 		//send a signal to parent, notifying him a product is ready
 		printf("\r[Productor %i] notifying the stock manager the production\n", self.product_id);
@@ -304,23 +300,24 @@ void ManagerBehavior(){
 	//int checker = 0; //debug variable
 	for (int i = 0; i < product_number; i++){
 		//get production for a day:
-		double day_production = DAY_DURATION*products[productors[i].product_id].volume*UT/(1000.0*productors[i].production_time);
+		double day_production = DAY_DURATION*products[productors[i].product_id].volume*UT/(productors[i].production_time);
 		devider = devider + day_production;
 	}
 	//partitionning
 	for (int i = 0; i < product_number; i++){
 		int product_volume = products[productors[i].product_id].volume;
-		double rebasement = DAY_DURATION*product_volume*UT*max_stock_volume/(1000.0*devider*productors[i].production_time); //change "percentage base" of day production
+		double rebasement = DAY_DURATION*product_volume*UT*max_stock_volume/(devider*productors[i].production_time); //change "percentage base" of day production
 		int stock_base = (int)(rebasement - fmod(rebasement, product_volume));
 		int stock_size = stock_base + roundStock(rebasement, product_volume); //true stock size
 		//checker = checker + stock_size;
 		stock_size = stock_size/product_volume; //stock size relative to its product volume //allows to restrict the size to the number of products it can contain
+		printf("\r[Stock Manager] stock %i, size: %i\n", i, stock_size);
 		int stock[stock_size/product_volume];
 		stocks_parameters[i] = stock_size;
 		stocks_parameters[i+product_number] = 0;
 		stocks[i] = stock;
 	}
-	printf("[Stock Manager] stock has been partitionned\n");
+	printf("\r[Stock Manager] stock has been partitionned\n");
 
 	printf("\r[Stock Manager] expecting signal from productor for ready status\n");
 	while(status == EXPECTING_P){
@@ -335,7 +332,7 @@ void ManagerBehavior(){
 		segment_tab[i] = shmat(shmid_tab[i], NULL, 0);
 		segment_tab[i+product_number] = segment_tab[i]+1;
 	}
-	printf("[Stock Manager] shm have been found\n");
+	printf("\r[Stock Manager] shm have been found\n");
 	//send to productors ready stocks status
 	sigqueue(productors_pid, SIGRTR, envelope);
 
@@ -366,12 +363,9 @@ void ManagerBehavior(){
 	for (int i = 0; i < client_number; i++){
 		printf("\r[Stock Manager] Opening client %i message queue\n", i);
 		do{
-			//printf("\tTrying %i\n", i);
 			sprintf(s, "/c%i-queue", i);
-			//printf("\rtest\n");
 			message_queues[i] = mq_open(s, O_WRONLY);
 		}while(message_queues[i] == -1);
-		//printf("\tdid it\n");
 	}
 	//send clients ready message queues status
 	sigqueue(clients_pid, SIGRTR, envelope);
@@ -379,11 +373,13 @@ void ManagerBehavior(){
 	bzero(s, 1024);
 
 	//expect signals from Productors or Clients
-	printf("[Stock Manager] Allows the Productors and the Clients to send signals\n");
+	printf("\r[Stock Manager] Allows the Productors and the Clients to send signals\n");
 
 	//principle loop
 	while(status == OPERATING){
-		if (isDayTime()){
+		/*if (isDayTime()){
+			//printf(" day time\n");
+			//printf("\r[Stock Manager] order count = %i\n", count);
 			for (int i = 0; i < count; i++){ //count is used here to count the number of orders
 				//check if the order can be honored
 				int j = 0;
@@ -409,12 +405,11 @@ void ManagerBehavior(){
 
 					int status = mq_send(message_queues[client_id], s, strlen(s), 0);
 					if (status == -1)
-						printf("Error trying to send message via queue: %s to client n_%i\n", s, client_id);
+						printf("\rError trying to send message via queue: %s to client n_%i\n", s, client_id);
 
 					bzero(s, 1024);
 				}
-			}
-		}
+			}*/
 	}
 
 	sigaddset(&mask, SIGRTR);
@@ -442,7 +437,7 @@ void* ClientBehavior(void* unused){
 	status = EXPECTING;
 
 	sem_wait(&semaphore);
-	printf("[Client %i] created\n", count);
+	printf("\r[Client %i] created\n", count);
 	Client self = clients[count++];
 	sem_post(&semaphore);
 
@@ -462,7 +457,7 @@ void* ClientBehavior(void* unused){
 	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
 
 	if(queue == -1){
-		printf("mq_open error\n");
+		printf("\rmq_open error\n");
 		thread_retval = EXIT_FAILURE;
 		quit = __FINAL__;
 		sem_wait(&semaphore);
@@ -491,7 +486,7 @@ void* ClientBehavior(void* unused){
 		sleep(wait_time);
 
 
-		printf("[Client %i] sending signal to stock manager (same thing as sending an order)\n", self.id);
+		printf("\r[Client %i] sending signal to stock manager (same thing as sending an order)\n", self.id);
 		//Send signal to stock with the request
 		sem_wait(&semaphore);
 		envelope.sival_int = self.id;
@@ -501,11 +496,11 @@ void* ClientBehavior(void* unused){
 		size_t amount;
 
 		// Wait for queue to be filled
-		printf("[Client %i] waiting for stock manager to send back the order\n", self.id);
+		printf("\r[Client %i] waiting for stock manager to send back the order\n", self.id);
 		do{
 			amount = mq_receive(queue, buffer, 1024, &priority);
 			if (status == __FINAL__){
-				printf("[Client %i] closing message queues\n", self.id);
+				printf("\r[Client %i] closing message queues\n", self.id);
 				mq_close(queue);
 				mq_unlink(mq_name);
 
@@ -515,11 +510,11 @@ void* ClientBehavior(void* unused){
 			}
 		}while(amount == -1);
 
-		printf("[Client %i] received order: %s", self.id, buffer);
+		printf("\r[Client %i] received order: %s", self.id, buffer);
 
 	}
 
-	printf("[Client %i] closing message queues\n", self.id);
+	printf("\r[Client %i] closing message queues\n", self.id);
 	mq_close(queue);
 	mq_unlink(mq_name);
 
@@ -546,11 +541,18 @@ void handleFullProductorStock(int signum, siginfo_t* info, void* context){
 	//int *product_id = segment_tab[productor_id];
 	int *serial_number = segment_tab[productor_id+product_number];
 
+	printf("\r[Stock Manager] will try to stock the new product (%i) if possible\n", *serial_number);
 	if (stocks_parameters[productor_id + product_number] < stocks_parameters[productor_id]){
+		printf("\r[Stock Manager] pick up new product %i\n", productor_id);
 		stocks[productor_id][stocks_parameters[productor_id + product_number]] = *serial_number;
+		printf("\r[Stock Manager] adding this product to the stocks [%i][%i]\n", productor_id, stocks_parameters[productor_id + product_number]);
 		stocks_parameters[productor_id + product_number]++;
+		printf("\r[Stock Manager] notifying the productor %i his local stock is now empty and go to next place in stock: %i\n", productor_id, stocks_parameters[productor_id + product_number]);
 		*serial_number = -1;
 	}
+	else
+		printf("\r[Stock Manager] no more place\n");
+	printf("\r\tdone\n");
 }
 
 void handleOrder(int signum, siginfo_t* info, void* context){
@@ -565,7 +567,7 @@ void handleReady(int signum, siginfo_t* info, void* context){
 	sigaddset(&mask, SIGRTR);
 	sigprocmask(SIG_SETMASK, &mask, NULL);
 
-	printf("[%ld] stock manager is ready\n", getpid());
+	printf("\r[%ld] stock manager is ready\n", getpid());
 
 	sem_wait(&semaphore);
 	if (status == EXPECTING)
@@ -608,15 +610,15 @@ int getDeltaMili(){
 	return delta;
 }
 
-bool isDayTime(){
+int isDayTime(){
 	int delta = getDeltaMili();
 	double time_passed = (double)delta / UT; //in UT
-	double time_of_day = time_passed / (DAY_DURATION+NIGHT_DURATION);
+	double time_of_day = fmod(time_passed, (DAY_DURATION+NIGHT_DURATION));
 
 	if (time_of_day <= DAY_DURATION)
-		return true;
+		return 1;
 	
-	return false;
+	return 0;
 }
 
 int roundStock(double base, int product_volume){
