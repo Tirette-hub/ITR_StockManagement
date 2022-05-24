@@ -83,7 +83,7 @@ void handleReady(int, siginfo_t*, void*);
 int getDeltaMili();
 int isDayTime();
 int roundStock(double, int);
-char* format(char*, int);
+void format(char*, int);
 
 //setters
 void createDataSet();
@@ -118,6 +118,13 @@ int main(int argc, char* argv[]){
 	other_pid = getpid();
 
 	createDataSet();
+
+	/*for (int i = 0; i < client_number; i++){
+		printf("[Client %i] request size: %i\n", i, clients[i].request[0]);
+		for (int j = 0; j < clients[i].request[0]; j++){
+			printf("\r%i: %i\n", clients[i].request[1+2*j], clients[i].request[1+2*j+1]);
+		}
+	}*/
 
 	begin = clock();
 	pid_t fvalue = fork();
@@ -170,6 +177,10 @@ int main(int argc, char* argv[]){
 			sem_destroy(&semaphore);
 		}
 	}
+
+	for (int i = 0; i < client_number; i++)
+		free(clients[i].request);
+
 	printf("\rfinishing process\n");
 	return EXIT_SUCCESS;
 }
@@ -377,28 +388,33 @@ void ManagerBehavior(){
 
 	//principle loop
 	while(status == OPERATING){
-		/*if (isDayTime()){
-			//printf(" day time\n");
-			//printf("\r[Stock Manager] order count = %i\n", count);
+		if (isDayTime()){
+			int n = 0;
 			for (int i = 0; i < count; i++){ //count is used here to count the number of orders
 				//check if the order can be honored
-				int j = 0;
+				printf("\r[Stock Manager] pending order (%i)\n", i);
 				int client_id = order_queue[i];
-				int *product_list = clients[client_id].request;
-				int number_of_products = product_list[j++];
+				printf("\r[Stock Manager] order is from client %i\n", client_id);
+				Client client = clients[client_id];
+				int number_of_products = client.request[0];
 				bool deliverable = true;
-				for (int i = 0; i < number_of_products && deliverable; i++)
-					if (stocks_parameters[product_number+product_list[1+i]] < product_list[i+2])
+				for (int i = 0; i < number_of_products; i++){
+					if (stocks_parameters[product_number+client.request[1+i]] < client.request[i+2]){
+						printf("\r\tnot enough products\n");
 						deliverable = false;
+						break;
+					}
+				}
 
 				if (deliverable){
 					printf("\r[Stock Manager] found a deliverable order\n");
 					//empty stocks
 					for (int i = 0; i < number_of_products; i++){
-						int number_to_send = product_list[i+2];
+						int number_to_send = client.request[2*i+2];
+						printf("\r[Stock Manager] number of product %i to send: %i\n", client.request[2*i+1], number_to_send);
 						for (int j = 0; j < number_to_send; j++){
-							format(s, stocks_parameters[product_number+product_list[1+i]]);
-							stocks_parameters[product_number+product_list[1+i]]--;
+							format(s, stocks_parameters[product_number+client.request[1+i]]);
+							stocks_parameters[product_number+client.request[1+i]]--;
 						}
 					}
 					//by changing only the id pointing to the "empty" stock case, filling again this case will overwrite the previous serial number
@@ -407,9 +423,21 @@ void ManagerBehavior(){
 					if (status == -1)
 						printf("\rError trying to send message via queue: %s to client n_%i\n", s, client_id);
 
+					n++;
+
 					bzero(s, 1024);
 				}
-			}*/
+			}
+			
+			if (n == 2)
+				count = 0;
+			else if (n == 1){
+				if (count == 2)
+					order_queue[0] = order_queue[1];
+
+				count--;
+			}
+		}
 	}
 
 	sigaddset(&mask, SIGRTR);
@@ -628,15 +656,17 @@ int roundStock(double base, int product_volume){
 	return product_volume;
 }
 
-char* format(char* s, int value){
-	char* retval;
+void format(char* s, int value){
+	//char* retval;
 	if (s == NULL){
-		sprintf(retval, "%i", value);
+		sprintf(s, "%i", value);
 	}else{
-		sprintf(retval, "%s %i", s, value);
+		printf("testing\n");
+		sprintf(s, "%s %i", s, value);
+		printf("test\n");
 	}
 
-	return retval;
+	//return retval;
 }
 
 
@@ -692,24 +722,34 @@ void createDataSet(){
 	productors[3] = quarry;
 
 	//create clients
-	int order[5] = {2, apple.id, 2, pear.id, 3};
+	int order1[5] = {2, apple.id, 2, pear.id, 3};
 	Client market = {
 		0,
 		2,
 		10,
-		order
+		malloc(5*sizeof(int))
 	};
-	order[0] = 2;
-	order[1] = wood.id;
-	order[2] = 1;
-	order[3] = brick.id;
-	order[4] = 5;
+	for (int i = 0; i < 2*order1[0]+1; i++){
+
+		market.request[i] = order1[i];
+	}
+	int order2[5] = {2, wood.id, 1, brick.id, 5};
 	Client mason = {
 		1,
 		5,
 		15,
-		order
+		malloc(5*sizeof(int))
 	};
+	for (int i = 0; i < 2*order2[0]+1; i++){
+		mason.request[i] = order2[i];
+	}
 	clients[0] = market;
 	clients[1] = mason;
+
+	/*for (int i = 0; i < client_number; i++){
+		printf("[Client %i] request size: %i\n", i, clients[i].request[0]);
+		for (int j = 0; j < clients[i].request[0]; j++){
+			printf("\r%i: %i\n", clients[i].request[1+2*j], clients[i].request[1+2*j+1]);
+		}
+	}*/
 }
