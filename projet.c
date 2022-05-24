@@ -13,6 +13,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <mqueue.h>
+#include <errno.h>
 
 #include <signal.h>
 
@@ -84,6 +85,7 @@ int getDeltaMili();
 int isDayTime();
 int roundStock(double, int);
 void format(char*, int);
+void printStocks();
 
 //setters
 void createDataSet();
@@ -323,10 +325,13 @@ void ManagerBehavior(){
 		//checker = checker + stock_size;
 		stock_size = stock_size/product_volume; //stock size relative to its product volume //allows to restrict the size to the number of products it can contain
 		//printf("\r[Stock Manager] stock %i, size: %i\n", i, stock_size);
-		int stock[stock_size/product_volume];
 		stocks_parameters[i] = stock_size;
 		stocks_parameters[i+product_number] = 0;
-		stocks[i] = stock;
+		stocks[i] = malloc(stock_size*sizeof(int));
+
+		for(int j = 0; j < stock_size; j++){
+			stocks[i][j] = -1;
+		}
 	}
 	//printf("\r[Stock Manager] stock has been partitionned\n");
 
@@ -393,7 +398,7 @@ void ManagerBehavior(){
 				int number_of_products = client.request[0];
 				bool deliverable = true;
 				for (int i = 0; i < number_of_products; i++){
-					if (stocks_parameters[product_number+client.request[1+i]] < client.request[i+2]){
+					if (stocks_parameters[product_number+client.request[1+2*i]] < client.request[2*i+2]){
 						//printf("\r\tnot enough products in stocks\n");
 						deliverable = false;
 						break;
@@ -402,21 +407,34 @@ void ManagerBehavior(){
 
 				if (deliverable){
 					printf("\r[Stock Manager] found a deliverable order\n");
+					//printStocks();
 					//empty stocks
 					for (int i = 0; i < number_of_products; i++){
 						int number_to_send = client.request[2*i+2];
 						printf("\r[Stock Manager] number of product %i to send: %i\n", client.request[2*i+1], number_to_send);
 						for (int j = 0; j < number_to_send; j++){
-							format(s, stocks_parameters[product_number+client.request[1+i]]);
-							stocks_parameters[product_number+client.request[1+i]]--;
+							format(s, stocks_parameters[product_number+client.request[1+2*i]]);
+							stocks_parameters[product_number+client.request[1+2*i]]--;
+							stocks[client.request[2*i+1]][stocks_parameters[product_number+client.request[1+2*i]]] = -1;
 						}
 					}
+					//printStocks();
 					//by changing only the id pointing to the "empty" stock case, filling again this case will overwrite the previous serial number
 
+					//printf("\r[Stock Manager] test: %i\n", strlen(s));
 					int status = mq_send(message_queues[client_id], s, strlen(s), 0);
-					printf("\r[Stock Manager] order has been sent to client\n");
-					if (status == -1)
-						printf("\rError trying to send message via queue: %s to client n_%i\n", s, client_id);
+					printf("\r[Stock Manager] order (%s) has been sent to client\n", s);
+					if (status == -1){
+						/*if (errno == EINTR){
+							printf("\r[Stock Manager] error sys interruption\n");
+							status = __FINAL__;
+							break;
+						}
+						else{
+							perror("mq_send");
+						}*/
+						perror("mq_send");
+					}
 
 					n++;
 
@@ -445,6 +463,7 @@ void ManagerBehavior(){
 		shmctl(shmid_tab[i], IPC_RMID, NULL);
 		shmdt(segment_tab[i]);
 		shmdt(segment_tab[i+product_number]);
+		free(stocks[i]);
 	}
 
 	free(s);
@@ -478,6 +497,7 @@ void* ClientBehavior(void* unused){
 	sprintf(mq_name, "/c%i-queue", self.id);
 	printf("\r[Client %i] creating message queue \"%s\"\n", self.id, mq_name);
 	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
+	struct mq_attr mqa;
 
 	if(queue == -1){
 		printf("\rmq_open error\n");
@@ -521,7 +541,8 @@ void* ClientBehavior(void* unused){
 		// Wait for queue to be filled
 		printf("\r[Client %i] waiting for stock manager to send back the order\n", self.id);
 		do{
-			amount = mq_receive(queue, buffer, 1024, &priority);
+			mq_getattr(queue, &mqa);
+			amount = mq_receive(queue, buffer, mqa.mq_msgsize, &priority);
 			if (status == __FINAL__){
 				printf("\r[Client %i] closing message queues\n", self.id);
 				mq_close(queue);
@@ -531,9 +552,12 @@ void* ClientBehavior(void* unused){
 
 				pthread_exit(&thread_retval);
 			}
+			if (amount == -1){
+				perror("mq_receive");
+			}
 		}while(amount == -1);
 
-		printf("\r[Client %i] received order: %s", self.id, buffer);
+		printf("\r[Client %i] received order: %s\n", self.id, buffer);
 
 	}
 
@@ -573,8 +597,10 @@ void handleFullProductorStock(int signum, siginfo_t* info, void* context){
 		//printf("\r[Stock Manager] notifying the productor %i his local stock is now empty and go to next place in stock: %i\n", productor_id, stocks_parameters[productor_id + product_number]);
 		*serial_number = -1;
 	}
-	else
+	else{
 		printf("\r[Stock Manager] no more place\n");
+		printStocks();
+	}
 }
 
 void handleOrder(int signum, siginfo_t* info, void* context){
@@ -654,7 +680,10 @@ void format(char* s, int value){
 	//char* retval;
 	if (s == NULL){
 		sprintf(s, "%i", value);
-	}else{
+	}else if(strcmp(s, "") == 0){
+		sprintf(s, "%i", value);
+	}
+	else{
 		sprintf(s, "%s %i", s, value);
 	}
 
@@ -744,4 +773,15 @@ void createDataSet(){
 			printf("\r%i: %i\n", clients[i].request[1+2*j], clients[i].request[1+2*j+1]);
 		}
 	}*/
+}
+
+void printStocks(){
+	for (int i = 0; i < product_number; i++){
+		printf("Stock[%i]:{", i);
+		for (int j = 0; j < stocks_parameters[i]; j++){
+			printf("%i,", stocks[i][j]);
+		}
+		putchar('}');
+		printf("\n");
+	}
 }
