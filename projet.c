@@ -201,13 +201,13 @@ void* ProductorBehavior(void* unused){
 	//link this thread to a specific productor defined previously
 	//create key to create a shared memory
 	sem_wait(&semaphore);
-	printf("\r[Productor %i] created\n", count);
+	//printf("\r[Productor %i] created\n", count);
 	key_t ipc_key = ftok("projet.c", count);
 	Productor self = productors[count++];
 	sem_post(&semaphore);
 
 	//create local stock
-	shmid = shmget(ipc_key, 2*sizeof(int), IPC_CREAT | 0600); //check how to create the unique id for product identification
+	shmid = shmget(ipc_key, 2*sizeof(int), IPC_CREAT | 0666); //check how to create the unique id for product identification
 	//link shm addresses to pointers
 	local_stock = shmat(shmid, NULL, 0);
 	serial_id = local_stock+1;
@@ -250,7 +250,7 @@ void* ProductorBehavior(void* unused){
 		printf("\r[Productor %i] producting (%i)\n", self.product_id, *serial_id);
 
 		//send a signal to parent, notifying him a product is ready
-		printf("\r[Productor %i] notifying the stock manager the production\n", self.product_id);
+		//printf("\r[Productor %i] notifying the stock manager the production\n", self.product_id);
 		sem_wait(&semaphore);
 		envelope.sival_int = self.product_id;
 		sigqueue(other_pid, SIGRTF, envelope);
@@ -322,15 +322,15 @@ void ManagerBehavior(){
 		int stock_size = stock_base + roundStock(rebasement, product_volume); //true stock size
 		//checker = checker + stock_size;
 		stock_size = stock_size/product_volume; //stock size relative to its product volume //allows to restrict the size to the number of products it can contain
-		printf("\r[Stock Manager] stock %i, size: %i\n", i, stock_size);
+		//printf("\r[Stock Manager] stock %i, size: %i\n", i, stock_size);
 		int stock[stock_size/product_volume];
 		stocks_parameters[i] = stock_size;
 		stocks_parameters[i+product_number] = 0;
 		stocks[i] = stock;
 	}
-	printf("\r[Stock Manager] stock has been partitionned\n");
+	//printf("\r[Stock Manager] stock has been partitionned\n");
 
-	printf("\r[Stock Manager] expecting signal from productor for ready status\n");
+	//printf("\r[Stock Manager] expecting signal from productor for ready status\n");
 	while(status == EXPECTING_P){
 		//wait for productors to be ready
 		if (status == __FINAL__){
@@ -339,11 +339,10 @@ void ManagerBehavior(){
 	}
 	//creating shm
 	for (int i = 0; i < product_number; i++){
-		shmid_tab[i] = shmget(ftok("projet.c", i), 2*sizeof(int), IPC_CREAT | 0600); //get the shm id
+		shmid_tab[i] = shmget(ftok("projet.c", i), 2*sizeof(int), IPC_CREAT | 0666); //get the shm id
 		segment_tab[i] = shmat(shmid_tab[i], NULL, 0);
 		segment_tab[i+product_number] = segment_tab[i]+1;
 	}
-	printf("\r[Stock Manager] shm have been found\n");
 	//send to productors ready stocks status
 	sigqueue(productors_pid, SIGRTR, envelope);
 
@@ -353,8 +352,6 @@ void ManagerBehavior(){
 	//expects clients to send ready status
 	/*sigdelset(&mask, SIGRTC);
 	sigprocmask(SIG_SETMASK, &mask, NULL);*/
-
-	printf("\r[Stock Manager] expecting signal from clients for ready status\n");
 
 	while(status == EXPECTING_C){
 		//wait for clients to be ready
@@ -370,9 +367,8 @@ void ManagerBehavior(){
 	}
 
 	char *s = malloc(1024*sizeof(char));
-	printf("\r[Stock Manager] Opening Message Queues\n");
 	for (int i = 0; i < client_number; i++){
-		printf("\r[Stock Manager] Opening client %i message queue\n", i);
+		//printf("\r[Stock Manager] Opening client %i message queue\n", i);
 		do{
 			sprintf(s, "/c%i-queue", i);
 			message_queues[i] = mq_open(s, O_WRONLY);
@@ -384,23 +380,21 @@ void ManagerBehavior(){
 	bzero(s, 1024);
 
 	//expect signals from Productors or Clients
-	printf("\r[Stock Manager] Allows the Productors and the Clients to send signals\n");
 
 	//principle loop
 	while(status == OPERATING){
-		if (isDayTime()){
+		//if (isDayTime()){
 			int n = 0;
 			for (int i = 0; i < count; i++){ //count is used here to count the number of orders
 				//check if the order can be honored
-				printf("\r[Stock Manager] pending order (%i)\n", i);
 				int client_id = order_queue[i];
-				printf("\r[Stock Manager] order is from client %i\n", client_id);
+				//printf("\r[Stock Manager] pending order from %i\n", client_id);
 				Client client = clients[client_id];
 				int number_of_products = client.request[0];
 				bool deliverable = true;
 				for (int i = 0; i < number_of_products; i++){
 					if (stocks_parameters[product_number+client.request[1+i]] < client.request[i+2]){
-						printf("\r\tnot enough products\n");
+						//printf("\r\tnot enough products in stocks\n");
 						deliverable = false;
 						break;
 					}
@@ -420,6 +414,7 @@ void ManagerBehavior(){
 					//by changing only the id pointing to the "empty" stock case, filling again this case will overwrite the previous serial number
 
 					int status = mq_send(message_queues[client_id], s, strlen(s), 0);
+					printf("\r[Stock Manager] order has been sent to client\n");
 					if (status == -1)
 						printf("\rError trying to send message via queue: %s to client n_%i\n", s, client_id);
 
@@ -437,7 +432,7 @@ void ManagerBehavior(){
 
 				count--;
 			}
-		}
+		//}
 	}
 
 	sigaddset(&mask, SIGRTR);
@@ -465,7 +460,7 @@ void* ClientBehavior(void* unused){
 	status = EXPECTING;
 
 	sem_wait(&semaphore);
-	printf("\r[Client %i] created\n", count);
+	//printf("\r[Client %i] created\n", count);
 	Client self = clients[count++];
 	sem_post(&semaphore);
 
@@ -505,7 +500,7 @@ void* ClientBehavior(void* unused){
 		//wait for stock manager to send ready status
 	}
 
-	printf("\r[Client %i] main loop\n", self.id);
+	//printf("\r[Client %i] main loop\n", self.id);
 
 	while(status == OPERATING){
 		//Wait before send request
@@ -514,7 +509,7 @@ void* ClientBehavior(void* unused){
 		sleep(wait_time);
 
 
-		printf("\r[Client %i] sending signal to stock manager (same thing as sending an order)\n", self.id);
+		//printf("\r[Client %i] sending signal to stock manager (same thing as sending an order)\n", self.id);
 		//Send signal to stock with the request
 		sem_wait(&semaphore);
 		envelope.sival_int = self.id;
@@ -569,18 +564,17 @@ void handleFullProductorStock(int signum, siginfo_t* info, void* context){
 	//int *product_id = segment_tab[productor_id];
 	int *serial_number = segment_tab[productor_id+product_number];
 
-	printf("\r[Stock Manager] will try to stock the new product (%i) if possible\n", *serial_number);
+	//printf("\r[Stock Manager] will try to stock the new product (%i) if possible\n", *serial_number);
 	if (stocks_parameters[productor_id + product_number] < stocks_parameters[productor_id]){
-		printf("\r[Stock Manager] pick up new product %i\n", productor_id);
+		//printf("\r[Stock Manager] pick up new product %i\n", productor_id);
 		stocks[productor_id][stocks_parameters[productor_id + product_number]] = *serial_number;
-		printf("\r[Stock Manager] adding this product to the stocks [%i][%i]\n", productor_id, stocks_parameters[productor_id + product_number]);
+		//printf("\r[Stock Manager] adding this product to the stocks [%i][%i]\n", productor_id, stocks_parameters[productor_id + product_number]);
 		stocks_parameters[productor_id + product_number]++;
-		printf("\r[Stock Manager] notifying the productor %i his local stock is now empty and go to next place in stock: %i\n", productor_id, stocks_parameters[productor_id + product_number]);
+		//printf("\r[Stock Manager] notifying the productor %i his local stock is now empty and go to next place in stock: %i\n", productor_id, stocks_parameters[productor_id + product_number]);
 		*serial_number = -1;
 	}
 	else
 		printf("\r[Stock Manager] no more place\n");
-	printf("\r\tdone\n");
 }
 
 void handleOrder(int signum, siginfo_t* info, void* context){
@@ -661,9 +655,7 @@ void format(char* s, int value){
 	if (s == NULL){
 		sprintf(s, "%i", value);
 	}else{
-		printf("testing\n");
 		sprintf(s, "%s %i", s, value);
-		printf("test\n");
 	}
 
 	//return retval;
