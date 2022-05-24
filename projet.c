@@ -8,6 +8,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #include <semaphore.h>
 #include <pthread.h>
@@ -73,7 +74,7 @@ void ManagerBehavior();
 void* ClientBehavior(void*);
 
 //handlers
-void handleQuit(int signum);
+void handleQuit(int, siginfo_t*, void*);
 void handleFullProductorStock(int, siginfo_t*, void*);
 void handleOrder(int, siginfo_t*, void*);
 void handleClientStarted(int, siginfo_t*, void*);
@@ -116,7 +117,13 @@ int order_queue[client_number];
 
 int main(int argc, char* argv[]){
 	sigfillset(&mask);
-	signal(SIGINT, handleQuit);
+	//signal(SIGINT, handleQuit);
+	struct sigaction descriptor;
+	descriptor.sa_flags=SA_SIGINFO;
+	descriptor.sa_sigaction = handleQuit;
+	sigaction(SIGALRM, &descriptor, NULL);
+	struct itimerval cfg;
+	cfg.it_value.tv_sec = 30;
 	other_pid = getpid();
 
 	createDataSet();
@@ -134,6 +141,9 @@ int main(int argc, char* argv[]){
 	if (fvalue != 0){
 		//srand(time(NULL));
 		//gestionnaire
+		sigdelset(&mask, SIGALRM);
+		sigprocmask(SIG_SETMASK, &mask, NULL);
+		setitimer(ITIMER_REAL, &cfg, NULL);
 		printf("\r[%ld]Creating stock manager\n", getpid());
 		ManagerBehavior();
 	}else{
@@ -148,6 +158,9 @@ int main(int argc, char* argv[]){
 
 		if (fvalue != 0){
 			//producteurs
+			sigdelset(&mask, SIGALRM);
+			sigprocmask(SIG_SETMASK, &mask, NULL);
+			setitimer(ITIMER_REAL, &cfg, NULL);
 			printf("\r[%ld]creating productors\n", getpid());
 			pthread_t threads_list[product_number];
 			sem_init(&semaphore, SEM_PRIVATE, 1);
@@ -164,6 +177,9 @@ int main(int argc, char* argv[]){
 		}else{
 			srand(time(NULL) ^ (getpid() << 16));
 			//clients
+			sigdelset(&mask, SIGALRM);
+			sigprocmask(SIG_SETMASK, &mask, NULL);
+			setitimer(ITIMER_REAL, &cfg, NULL);
 			printf("\r[%ld]Creating clients\n", getpid());
 			pthread_t threads_list[client_number];
 			sem_init(&semaphore, SEM_PRIVATE, product_number + 1);
@@ -414,6 +430,7 @@ void ManagerBehavior(){
 						printf("\r[Stock Manager] number of product %i to send: %i\n", client.request[2*i+1], number_to_send);
 						for (int j = 0; j < number_to_send; j++){
 							format(s, stocks_parameters[product_number+client.request[1+2*i]]);
+							sprintf(s, "%s\0", s);
 							stocks_parameters[product_number+client.request[1+2*i]]--;
 							stocks[client.request[2*i+1]][stocks_parameters[product_number+client.request[1+2*i]]] = -1;
 						}
@@ -452,6 +469,8 @@ void ManagerBehavior(){
 			}
 		//}
 	}
+
+	printStocks();
 
 	sigaddset(&mask, SIGRTR);
 	sigaddset(&mask, SIGRTF);
@@ -496,7 +515,7 @@ void* ClientBehavior(void* unused){
 	//Open message queue
 	sprintf(mq_name, "/c%i-queue", self.id);
 	printf("\r[Client %i] creating message queue \"%s\"\n", self.id, mq_name);
-	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY);
+	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY | O_NONBLOCK);
 	struct mq_attr mqa;
 
 	if(queue == -1){
@@ -543,19 +562,11 @@ void* ClientBehavior(void* unused){
 		do{
 			mq_getattr(queue, &mqa);
 			amount = mq_receive(queue, buffer, mqa.mq_msgsize, &priority);
-			if (status == __FINAL__){
-				printf("\r[Client %i] closing message queues\n", self.id);
-				mq_close(queue);
-				mq_unlink(mq_name);
-
-				free(mq_name);
-
-				pthread_exit(&thread_retval);
-			}
 			if (amount == -1){
+				printf("\r[Client %i] ", self.id);
 				perror("mq_receive");
 			}
-		}while(amount == -1);
+		}while(amount == -1 && status == OPERATING);
 
 		printf("\r[Client %i] received order: %s\n", self.id, buffer);
 
@@ -567,13 +578,17 @@ void* ClientBehavior(void* unused){
 
 	free(mq_name);
 
+	printf("\r[Client %i] done\n", self.id);
+
 	pthread_exit(&thread_retval);
 }
 
 
 //handlers
 
-void handleQuit(int signum){
+void handleQuit(int signum, siginfo_t* info, void* context){
+	sigaddset(&mask, SIGALRM);
+	sigprocmask(SIG_SETMASK, &mask, NULL);
 	printf("\rquitting\n");
 	if (status != __FINAL__){
 		status = __FINAL__;
@@ -581,6 +596,9 @@ void handleQuit(int signum){
 }
 
 void handleFullProductorStock(int signum, siginfo_t* info, void* context){
+	sigaddset(&mask, SIGRTF);
+	sigprocmask(SIG_SETMASK, &mask, NULL);
+
 	int productor_id = info->si_value.sival_int;
 
 	printf("\r[Stock Manager] received a full stock signal from productor %i\n", productor_id);
