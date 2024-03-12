@@ -1,6 +1,4 @@
 # Introduction
-This academic project has been writen in the context of the "Informatique en Temps Réel" lecture or _Real-Time Computing_ at the University of Mons.
-It aims accomodating with memory, processus, threads and inter-process communication management.\
 The goal is to construct 3 process:\
 - 1. Manager Processus: It manages all the orders that can be yield by clients via message queues. It also create a shared memory to represent stocks of productors in which the manager will pick the goods to fill orders of clients.
 - 2. Productor Processus: It can product some goods, identified by an id, a volume, and has a description. Itself is identified by the product id it produces and a production time. It also has a limited stock size which must be emptied prior the productor can produce again.
