@@ -41,6 +41,15 @@
 #define UT 2 //1Unit of Time = 2sec => 1sec = .5 UT
 //one day is represented by 24 unit of time
 
+#define BLACK "\033[0;30m"
+#define RED "\033[0;31m"
+#define GREEN "\033[0;32m"
+#define YELLOW "\033[0;33m"
+#define BLUE "\033[0;34m"
+#define PURPLE "\033[0;35m"
+#define CYAN "\033[0;36m"
+#define WHITE "\033[0;37m"
+
 #define product_number 4
 #define client_number 2
 typedef enum{false = 0, true = 1} bool;
@@ -138,7 +147,7 @@ int main(int argc, char* argv[]){
 		sigdelset(&mask, SIGINT);
 		sigprocmask(SIG_SETMASK, &mask, NULL);
 		setitimer(ITIMER_REAL, &cfg, NULL);
-		printf("\r[%ld]Creating stock manager\n", getpid());
+		printf("\r%s[%ld]Creating stock manager%s\n", GREEN, getpid(), WHITE);
 		ManagerBehavior();
 	}else{
 		fvalue = fork();
@@ -155,7 +164,7 @@ int main(int argc, char* argv[]){
 			sigdelset(&mask, SIGINT);
 			sigprocmask(SIG_SETMASK, &mask, NULL);
 			setitimer(ITIMER_REAL, &cfg, NULL);
-			printf("\r[%ld]creating productors\n", getpid());
+			printf("\r%s[%ld]Creating productors%s\n", GREEN, getpid(), WHITE);
 			pthread_t threads_list[product_number];
 			sem_init(&semaphore, SEM_PRIVATE, 1);
 
@@ -174,7 +183,7 @@ int main(int argc, char* argv[]){
 			sigdelset(&mask, SIGINT);
 			sigprocmask(SIG_SETMASK, &mask, NULL);
 			setitimer(ITIMER_REAL, &cfg, NULL);
-			printf("\r[%ld]Creating clients\n", getpid());
+			printf("\r%s[%ld]Creating clients%s\n", GREEN, getpid(), WHITE);
 			pthread_t threads_list[client_number];
 			sem_init(&semaphore, SEM_PRIVATE, product_number + 1);
 
@@ -193,7 +202,7 @@ int main(int argc, char* argv[]){
 	for (int i = 0; i < client_number; i++)
 		free(clients[i].request);
 
-	printf("\r[%i] finishing process\n", getpid());
+	printf("\r%s[%i] finishing process%s\n", BLUE, getpid(), WHITE);
 	return EXIT_SUCCESS;
 }
 
@@ -247,6 +256,7 @@ void* ProductorBehavior(void* unused){
 				if ( shmctl (shmid, IPC_RMID, NULL) == -1)
 					perror ("shmctl");
 
+
 				shmdt(local_stock);
 				shmdt(serial_id);
 
@@ -268,7 +278,7 @@ void* ProductorBehavior(void* unused){
 		sleep(self.production_time);
 	}
 
-	printf("\r[Productor %i] production stopped\n", self.product_id);
+	printf("\r%s[Productor %i] production stopped%s\n", RED, self.product_id, WHITE);
 
 	//free the shm allocated
 	if ( shmctl (shmid, IPC_RMID, NULL) == -1)
@@ -403,7 +413,7 @@ void ManagerBehavior(){
 				}
 
 				if (deliverable){
-					printf("\r[Stock Manager] found a deliverable order\n");
+					printf("\r%s[Stock Manager] found a deliverable order%s\n", GREEN, WHITE);
 					//empty stocks
 					for (int i = 0; i < number_of_products; i++){
 						int number_to_send = client.request[2*i+2];
@@ -452,7 +462,7 @@ void ManagerBehavior(){
 	sigaddset(&mask, SIGRTR);
 	sigaddset(&mask, SIGRTF);
 
-	printf("\r[Stock Manager] free shm and message queues\n");
+	printf("\r%s[Stock Manager] free shm and message queues%s\n", RED, WHITE);
 
 	//free shm
 	for (int i = 0; i < product_number; i++){
@@ -490,12 +500,12 @@ void* ClientBehavior(void* unused){
 
 	//Open message queue
 	sprintf(mq_name, "/c%i-queue", self.id);
-	printf("\r[Client %i] creating message queue \"%s\"\n", self.id, mq_name);
+	printf("\r%s[Client %i] creating message queue \"%s\"%s\n", GREEN, self.id, mq_name, WHITE);
 	mqd_t queue = mq_open(mq_name, O_CREAT | O_RDONLY | O_NONBLOCK);
 	struct mq_attr mqa;
 
 	if(queue == -1){
-		printf("\rmq_open error\n");
+		printf("\r%smq_open error%s\n", RED, WHITE);
 		thread_retval = EXIT_FAILURE;
 		quit = __FINAL__;
 		sem_wait(&semaphore);
@@ -518,7 +528,7 @@ void* ClientBehavior(void* unused){
 	while(status == OPERATING){
 		//Wait before send request
 		int wait_time = (rand() % (max_time - min_time)) + min_time;
-		printf("\r[Client %i] wait for %isec before to send an order\n", self.id, wait_time);
+		printf("\r%s[Client %i] wait for %isec before to send an order%s\n", CYAN, self.id, wait_time, WHITE);
 		sleep(wait_time);
 
 
@@ -532,7 +542,7 @@ void* ClientBehavior(void* unused){
 		size_t amount;
 
 		// Wait for queue to be filled
-		printf("\r[Client %i] waiting for stock manager to send back the order\n", self.id);
+		printf("\r%s[Client %i] waiting for stock manager to send back the order%s\n", CYAN, self.id, WHITE);
 		do{
 			mq_getattr(queue, &mqa);
 			amount = mq_receive(queue, buffer, mqa.mq_msgsize, &priority);
@@ -546,13 +556,13 @@ void* ClientBehavior(void* unused){
 
 	}
 
-	printf("\r[Client %i] closing message queues\n", self.id);
+	printf("\r%s[Client %i] closing message queues%s\n", RED, self.id, WHITE);
 	mq_close(queue);
 	mq_unlink(mq_name);
 
 	free(mq_name);
 
-	printf("\r[Client %i] done\n", self.id);
+	printf("\r%s[Client %i] done%s\n", RED, self.id, WHITE);
 
 	pthread_exit(&thread_retval);
 }
@@ -563,7 +573,7 @@ void* ClientBehavior(void* unused){
 void handleQuit(int signum, siginfo_t* info, void* context){
 	sigaddset(&mask, SIGINT);
 	sigprocmask(SIG_SETMASK, &mask, NULL);
-	printf("\r[%i] quitting\n", getpid());
+	printf("\r%s[%i] quitting%s\n", BLUE, getpid(), WHITE);
 	if (status != __FINAL__){
 		status = __FINAL__;
 	}
@@ -575,7 +585,7 @@ void handleFullProductorStock(int signum, siginfo_t* info, void* context){
 
 	int productor_id = info->si_value.sival_int;
 
-	printf("\r[Stock Manager] received a full stock signal from productor %i\n", productor_id);
+	printf("\r%s[Stock Manager] received a full stock signal from productor %i%s\n", PURPLE, productor_id, WHITE);
 
 	int *serial_number = segment_tab[productor_id+product_number];
 
@@ -585,7 +595,7 @@ void handleFullProductorStock(int signum, siginfo_t* info, void* context){
 		*serial_number = -1;
 	}
 	else{
-		printf("\r[Stock Manager] no more place\n");
+		printf("\r%s[Stock Manager] no more place%s\n", RED, WHITE);
 		printStocks();
 	}
 }
