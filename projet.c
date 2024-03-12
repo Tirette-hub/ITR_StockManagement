@@ -74,6 +74,7 @@ void ManagerBehavior();
 void* ClientBehavior(void*);
 
 //handlers
+void handleInterrupt(int);
 void handleQuit(int, siginfo_t*, void*);
 void handleFullProductorStock(int, siginfo_t*, void*);
 void handleOrder(int, siginfo_t*, void*);
@@ -117,11 +118,12 @@ int order_queue[client_number];
 
 int main(int argc, char* argv[]){
 	sigfillset(&mask);
-	//signal(SIGINT, handleQuit);
+	//signal(SIGINT, handleInterrupt);
 	struct sigaction descriptor;
 	descriptor.sa_flags=SA_SIGINFO;
 	descriptor.sa_sigaction = handleQuit;
-	sigaction(SIGALRM, &descriptor, NULL);
+	//sigemptyset(&descriptor.sa_mask);
+	sigaction(SIGINT, &descriptor, NULL);
 	struct itimerval cfg;
 	cfg.it_value.tv_sec = 60;
 	other_pid = getpid();
@@ -133,7 +135,7 @@ int main(int argc, char* argv[]){
 
 	if (fvalue != 0){
 		//gestionnaire
-		sigdelset(&mask, SIGALRM);
+		sigdelset(&mask, SIGINT);
 		sigprocmask(SIG_SETMASK, &mask, NULL);
 		setitimer(ITIMER_REAL, &cfg, NULL);
 		printf("\r[%ld]Creating stock manager\n", getpid());
@@ -150,7 +152,7 @@ int main(int argc, char* argv[]){
 
 		if (fvalue != 0){
 			//producteurs
-			sigdelset(&mask, SIGALRM);
+			sigdelset(&mask, SIGINT);
 			sigprocmask(SIG_SETMASK, &mask, NULL);
 			setitimer(ITIMER_REAL, &cfg, NULL);
 			printf("\r[%ld]creating productors\n", getpid());
@@ -169,7 +171,7 @@ int main(int argc, char* argv[]){
 		}else{
 			srand(time(NULL) ^ (getpid() << 16));
 			//clients
-			sigdelset(&mask, SIGALRM);
+			sigdelset(&mask, SIGINT);
 			sigprocmask(SIG_SETMASK, &mask, NULL);
 			setitimer(ITIMER_REAL, &cfg, NULL);
 			printf("\r[%ld]Creating clients\n", getpid());
@@ -191,7 +193,7 @@ int main(int argc, char* argv[]){
 	for (int i = 0; i < client_number; i++)
 		free(clients[i].request);
 
-	printf("\rfinishing process\n");
+	printf("\r[%i] finishing process\n", getpid());
 	return EXIT_SUCCESS;
 }
 
@@ -559,9 +561,9 @@ void* ClientBehavior(void* unused){
 //handlers
 
 void handleQuit(int signum, siginfo_t* info, void* context){
-	sigaddset(&mask, SIGALRM);
+	sigaddset(&mask, SIGINT);
 	sigprocmask(SIG_SETMASK, &mask, NULL);
-	printf("\rquitting\n");
+	printf("\r[%i] quitting\n", getpid());
 	if (status != __FINAL__){
 		status = __FINAL__;
 	}
