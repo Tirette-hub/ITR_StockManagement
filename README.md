@@ -82,3 +82,8 @@ request (*int\**)
 *min_time:* 5  
 *max_time:* 15  
 *request:* {**BOIS**, 1, **BRIQUE**, 5}  
+
+
+# Authors
+Emilien Lemaire  
+Nathan Amorison
