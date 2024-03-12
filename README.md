@@ -1,5 +1,5 @@
 # Introduction
-The goal is to construct 3 process:\
+The goal is to construct 3 process:
 - 1. Manager Processus: It manages all the orders that can be yield by clients via message queues. It also create a shared memory to represent stocks of productors in which the manager will pick the goods to fill orders of clients.
 - 2. Productor Processus: It can product some goods, identified by an id, a volume, and has a description. Itself is identified by the product id it produces and a production time. It also has a limited stock size which must be emptied prior the productor can produce again.
 - 3. Client Processus: It sends static orders at random intervals of time to the manager. Each order is built with the product id the client wants and the quantity. The list has then _de facto_ an even length.\
