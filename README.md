@@ -1,21 +1,31 @@
-# ARCHITECTURE
-![project architecture](/schema_archi_projet.jpg)
-_The **SIGRT** arrow from **SM** to **P** is not in use anymore_  
+# Introduction
+This academic project has been writen in the context of the "Informatique en Temps Réel" lecture or _Real-Time Computing_ at the University of Mons.
+It aims accomodating with memory, processus, threads and inter-process communication management.\
+The goal is to construct 3 process:\
+- 1. Manager Processus: It manages all the orders that can be yield by clients via message queues. It also create a shared memory to represent stocks of productors in which the manager will pick the goods to fill orders of clients.
+- 2. Productor Processus: It can product some goods, identified by an id, a volume, and has a description. Itself is identified by the product id it produces and a production time. It also has a limited stock size which must be emptied prior the productor can produce again.\
+- 3. Client Processus: It sends static orders at random intervals of time to the manager. Each order is built with the product id the client wants and the quantity. The list has then _de facto_ an even length.
+_A day and night system is modelised as well. During night, Manager does not work and productions stop._
 
-# HOW TO RUN
+# Architecture
+The Manager's processus creates the shared memory that represents the stocks and wait the Client's processus to open the message queues. The stocks have optimized size based on the productors' production time.\
+The Productor's processus waits the Manager's pocessus for the shared memory to be created prior to begin the _production_. As soon as a good has been produced, the productor asks for a semaphore on the shared memory and put the product in it so that the manager can access it.\
+The Client's processus waits for the manager to create the message queues. When done it starts waiting in a random dynamic interval of time and sends static orders to the manager via the message queues.
+
+# How to run
 ```
 gcc projet.c -lm -pthread -lrt -o projet && sudo ./projet
 ```
-*do not try now, not tested yet, just read the code*
+*CTRL-C to stop the execution or it will run undefinitly*
 
-# HOW TO TEST
+# How to test
 ```
 gcc test.c -lm -o test && ./test
 ```
 Tests creation of stocks and their size for *Stock Manager* process
 
-# WHAT DOES IT CONTAINS
-## DATA STRUCTURES
+# What does a stock contains
+## Data structures
 ### 1. PRODUCT
 id (*int*)  
 volume (*int*)  
@@ -29,7 +39,7 @@ min_time (*int*)
 max_time (*int*)  
 request (*int\**)  
 
-## PRODUCTS
+## Products
 ### 1. POMME
 *id:* 0  
 *volume:* 1  
@@ -47,7 +57,7 @@ request (*int\**)
 *volume:* 2  
 *descr:* Utilisé dans la construction de maisons  
 
-## PRODUCTORS
+## Productors
 ### 1. POMMIERS
 *product_id:* 0  
 *production_time:* 1  
@@ -61,7 +71,7 @@ request (*int\**)
 *product_id:* 3  
 *production_time:* 3  
 
-## CLIENTS
+## Clients
 ### 1. MARAICHER
 *id:* 0  
 *min_time:* 2  
